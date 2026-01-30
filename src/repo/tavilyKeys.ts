@@ -146,20 +146,27 @@ export async function addTavilyKeys(
   // Limit batch size
   const keysToAdd = valid.slice(0, MAX_KEYS_PER_BATCH);
 
-  const stmts = keysToAdd.map((k, i) => {
-    const alias = aliasPrefix ? `${aliasPrefix}-${String(i + 1).padStart(3, "0")}` : "";
-    return db
-      .prepare(
-        `INSERT OR IGNORE INTO tavily_keys(key, alias, total_quota, used_quota, is_active, is_invalid, failed_count, tags, note, created_at)
-         VALUES(?, ?, 1000, 0, 1, 0, 0, '[]', '', ?)`
-      )
-      .bind(k, alias, now);
-  });
+  // Chunk INSERT operations to avoid D1 batch limit (~100 statements)
+  const CHUNK_SIZE = 50;
+  let added = 0;
 
-  const results = await db.batch(stmts);
-  const added = results.filter((r) => r.meta.changes > 0).length;
+  for (let i = 0; i < keysToAdd.length; i += CHUNK_SIZE) {
+    const chunk = keysToAdd.slice(i, i + CHUNK_SIZE);
+    const stmts = chunk.map((k, idx) => {
+      const alias = aliasPrefix ? `${aliasPrefix}-${String(i + idx + 1).padStart(3, "0")}` : "";
+      return db
+        .prepare(
+          `INSERT OR IGNORE INTO tavily_keys(key, alias, total_quota, used_quota, is_active, is_invalid, failed_count, tags, note, created_at)
+           VALUES(?, ?, 1000, 0, 1, 0, 0, '[]', '', ?)`
+        )
+        .bind(k, alias, now);
+    });
+
+    const results = await db.batch(stmts);
+    added += results.filter((r) => r.meta.changes > 0).length;
+  }
+
   const skipped = keysToAdd.length - added;
-  
   return { added, skipped, invalid };
 }
 

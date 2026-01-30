@@ -666,6 +666,49 @@ adminRoutes.post("/api/tavily/keys/add", requireAdminAuth, async (c) => {
   }
 });
 
+adminRoutes.post("/api/tavily/keys/validate", requireAdminAuth, async (c) => {
+  try {
+    const body = (await c.req.json()) as { keys?: string[] };
+    const rawKeys = Array.isArray(body.keys) ? body.keys : [];
+    
+    // Filter valid format keys
+    const TAVILY_KEY_REGEX = /^tvly-[A-Za-z0-9_-]{8,64}$/;
+    const keysToValidate = rawKeys
+      .map((k) => (typeof k === "string" ? k.trim() : ""))
+      .filter((k) => k && TAVILY_KEY_REGEX.test(k));
+    
+    if (!keysToValidate.length) {
+      return c.json({ success: true, data: { valid: [], invalid: [], formatInvalid: rawKeys.length } });
+    }
+
+    const valid: string[] = [];
+    const invalid: { key: string; reason: string }[] = [];
+    
+    // Check keys in parallel with concurrency limit
+    const CONCURRENCY = 5;
+    for (let i = 0; i < keysToValidate.length; i += CONCURRENCY) {
+      const batch = keysToValidate.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(batch.map((k) => checkTavilyKeyUsage(k).then((r) => ({ key: k, ...r }))));
+      
+      for (const r of results) {
+        if (r.valid) {
+          valid.push(r.key);
+        } else {
+          invalid.push({ key: r.key, reason: r.reason || "unknown" });
+        }
+      }
+    }
+    
+    return c.json({
+      success: true,
+      message: `验证完成: ${valid.length} 有效, ${invalid.length} 无效`,
+      data: { valid, invalid, formatInvalid: rawKeys.length - keysToValidate.length },
+    });
+  } catch (e) {
+    return c.json(jsonError(`验证失败: ${e instanceof Error ? e.message : String(e)}`, "TAVILY_KEYS_VALIDATE_ERROR"), 500);
+  }
+});
+
 adminRoutes.post("/api/tavily/keys/delete", requireAdminAuth, async (c) => {
   try {
     const body = (await c.req.json()) as { keys?: string[] };
