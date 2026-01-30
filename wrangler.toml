@@ -2,6 +2,11 @@ name = "grok2api"
 main = "src/index.ts"
 compatibility_date = "2026-01-28"
 
+# Force Worker to run in US West to avoid Grok API geo-restrictions
+[placement]
+mode = "smart"
+hint = "wnam"
+
 # Static assets (admin UI)
 assets = { directory = "./app/template", binding = "ASSETS" }
 
