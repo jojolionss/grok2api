@@ -1731,46 +1731,24 @@
     const loadAllTags = async () => { try { const r = await apiRequest('/api/tokens/tags/all'); if (!r) return; const d = await r.json(); if (d.success) { allTagsList = d.data; const tagFilter = $('filterTag'); const currentValue = tagFilter.value; tagFilter.innerHTML = '<option value="all">全部标签</option>' + allTagsList.map(tag => `<option value="${tag}">${tag}</option>`).join(''); tagFilter.value = currentValue } } catch (e) { console.error('加载标签列表失败:', e) } };
     const refreshTokens = async () => { await loadTokens(); await loadStats() };
     const refreshAllTokens = async () => {
-      if (!confirm('确定要刷新所有Token的剩余次数吗？这可能需要一段时间...')) return;
+      if (!confirm('刷新 Token 剩余次数？每次处理 20 个，如有更多需多次点击')) return;
 
       try {
+        showToast('正在刷新...', 'info');
         const r = await apiRequest('/api/tokens/refresh-all', { method: 'POST' });
         if (!r) return;
         const d = await r.json();
 
-        if (!d.success && d.data?.running) {
-          showToast('刷新任务正在进行中，请稍后再试', 'error');
-          return;
-        }
-
         if (!d.success) {
-          showToast(d.message || '启动刷新失败', 'error');
+          showToast(d.message || '刷新失败', 'error');
           return;
         }
 
-        showToast('刷新任务已启动...', 'info');
-        await new Promise(resolve => setTimeout(resolve, 300));
-
-        while (true) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          try {
-            const pr = await apiRequest('/api/tokens/refresh-progress');
-            if (!pr) break;
-            const pd = await pr.json();
-            if (pd.success && pd.data) {
-              const { current, total, success, failed, running } = pd.data;
-
-              if (!running) {
-                showToast(`刷新完成: 成功 ${success} 个, 失败 ${failed} 个`, 'success');
-                break;
-              }
-
-              if (total > 0) {
-                const pct = Math.round((current / total) * 100);
-                showToast(`刷新进度: ${current}/${total} (${pct}%) | 成功: ${success} 失败: ${failed}`, 'info');
-              }
-            }
-          } catch (e) { break; }
+        const { remaining } = d.data || {};
+        if (remaining > 0) {
+          showToast(d.message, 'info');
+        } else {
+          showToast(d.message, 'success');
         }
 
         await refreshTokens();
@@ -2140,46 +2118,22 @@
     const refreshTavilyKeys = async () => { await loadTavilyKeys(); await loadTavilyStats(); };
 
     const syncAllTavilyKeys = async () => {
-      showToast('正在启动同步...', 'info');
+      showToast('正在同步...', 'info');
       try {
         const r = await apiRequest('/api/tavily/keys/sync', {method:'POST'});
         const d = await r.json();
         if (d.success) {
-          showToast('同步任务已启动', 'success');
-          pollTavilySyncProgress();
+          const { remaining } = d.data || {};
+          if (remaining > 0) {
+            showToast(d.message, 'info');
+          } else {
+            showToast(d.message, 'success');
+          }
+          await refreshTavilyKeys();
         } else {
-          showToast(d.message || '启动失败', 'error');
+          showToast(d.message || '同步失败', 'error');
         }
       } catch (e) { showToast('同步失败: '+e.message, 'error'); }
-    };
-
-    const pollTavilySyncProgress = async () => {
-      const progressEl = $('tavilySyncProgress');
-      const barEl = $('tavilySyncBar');
-      const textEl = $('tavilySyncText');
-      progressEl.classList.remove('hidden');
-
-      const poll = async () => {
-        try {
-          const r = await apiRequest('/api/tavily/keys/sync-progress');
-          const d = await r.json();
-          if (d.success) {
-            const p = d.data;
-            const pct = p.total > 0 ? Math.round((p.current / p.total) * 100) : 0;
-            barEl.style.width = pct + '%';
-            textEl.textContent = `${p.current}/${p.total} (成功: ${p.success}, 失败: ${p.failed})`;
-            
-            if (p.running) {
-              setTimeout(poll, 1000);
-            } else {
-              progressEl.classList.add('hidden');
-              showToast(`同步完成: ${p.success}成功, ${p.failed}失败`, 'success');
-              await refreshTavilyKeys();
-            }
-          }
-        } catch (e) { console.error('Poll progress failed:', e); }
-      };
-      poll();
     };
 
     const testTavilyKey = async (key) => {

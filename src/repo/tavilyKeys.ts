@@ -44,6 +44,7 @@ export interface TavilySyncProgress {
   total: number;
   success: number;
   failed: number;
+  updated_at: number;
 }
 
 const MAX_FAILURES = 3;
@@ -336,7 +337,8 @@ export async function getTavilySyncProgress(db: Env["DB"]): Promise<TavilySyncPr
     total: number;
     success: number;
     failed: number;
-  }>(db, "SELECT running, current, total, success, failed FROM tavily_sync_progress WHERE id = 1");
+    updated_at: number;
+  }>(db, "SELECT running, current, total, success, failed, updated_at FROM tavily_sync_progress WHERE id = 1");
 
   return row
     ? {
@@ -345,8 +347,9 @@ export async function getTavilySyncProgress(db: Env["DB"]): Promise<TavilySyncPr
         total: row.total,
         success: row.success,
         failed: row.failed,
+        updated_at: row.updated_at,
       }
-    : { running: false, current: 0, total: 0, success: 0, failed: 0 };
+    : { running: false, current: 0, total: 0, success: 0, failed: 0, updated_at: Date.now() };
 }
 
 export async function setTavilySyncProgress(

@@ -276,16 +276,46 @@ adminRoutes.post("/api/tokens/test", requireAdminAuth, async (c) => {
 
 adminRoutes.post("/api/tokens/refresh-all", requireAdminAuth, async (c) => {
   try {
-    const progress = await getRefreshProgress(c.env.DB);
-    if (progress.running) {
-      return c.json({ success: false, message: "刷新任务正在进行中", data: progress });
+    const STUCK_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
+    const BATCH_SIZE = 20;
+    const db = c.env.DB;
+
+    const progress = await getRefreshProgress(db);
+
+    // Reset if stuck for more than 2 minutes
+    if (progress.running && progress.updated_at) {
+      const elapsed = Date.now() - progress.updated_at;
+      if (elapsed > STUCK_TIMEOUT_MS) {
+        await setRefreshProgress(db, { running: false });
+      } else {
+        return c.json({ success: false, message: "刷新任务正在进行中", data: progress });
+      }
     }
 
-    const tokens = await listTokens(c.env.DB);
-    await setRefreshProgress(c.env.DB, {
+    const allTokens = await listTokens(db);
+    // Filter out expired tokens, prioritize "未使用" (remaining_queries = -1) first
+    const tokensToRefresh = allTokens
+      .filter((t) => t.status !== "expired")
+      .sort((a, b) => {
+        // Prioritize tokens with remaining_queries = -1 (never refreshed)
+        const aNotRefreshed = a.remaining_queries === -1 ? 0 : 1;
+        const bNotRefreshed = b.remaining_queries === -1 ? 0 : 1;
+        return aNotRefreshed - bNotRefreshed;
+      });
+
+    if (!tokensToRefresh.length) {
+      return c.json({ success: true, message: "没有需要刷新的 Token", data: { processed: 0, remaining: 0 } });
+    }
+
+    // Count how many are "未使用" (never refreshed)
+    const notRefreshedCount = tokensToRefresh.filter((t) => t.remaining_queries === -1).length;
+    const batch = tokensToRefresh.slice(0, BATCH_SIZE);
+    const totalRemaining = tokensToRefresh.length;
+
+    await setRefreshProgress(db, {
       running: true,
       current: 0,
-      total: tokens.length,
+      total: batch.length,
       success: 0,
       failed: 0,
     });
@@ -293,42 +323,35 @@ adminRoutes.post("/api/tokens/refresh-all", requireAdminAuth, async (c) => {
     const settings = await getSettings(c.env);
     const cf = normalizeCfCookie(settings.grok.cf_clearance ?? "");
 
-    const db = c.env.DB;
-    const runRefresh = async () => {
-      let success = 0;
-      let failed = 0;
-      try {
-        for (let i = 0; i < tokens.length; i++) {
-          const t = tokens[i]!;
-          const cookie = cf ? `sso-rw=${t.token};sso=${t.token};${cf}` : `sso-rw=${t.token};sso=${t.token}`;
-          try {
-            const r = await checkRateLimits(cookie, settings.grok, "grok-4-fast");
-            if (r) {
-              const remaining = (r as any).remainingTokens;
-              if (typeof remaining === "number") await updateTokenLimits(db, t.token, { remaining_queries: remaining });
-              success += 1;
-            } else {
-              failed += 1;
-            }
-          } catch {
-            failed += 1;
-          }
-          await setRefreshProgress(db, { running: true, current: i + 1, total: tokens.length, success, failed });
-          await new Promise((res) => setTimeout(res, 100));
-        }
-      } finally {
-        await setRefreshProgress(db, { running: false, current: tokens.length, total: tokens.length, success, failed });
-      }
-    };
+    let success = 0;
+    let failed = 0;
 
-    // Use waitUntil if available, otherwise run inline (blocking)
-    if (c.executionCtx?.waitUntil) {
-      c.executionCtx.waitUntil(runRefresh());
-    } else {
-      runRefresh().catch(() => {});
+    for (let i = 0; i < batch.length; i++) {
+      const t = batch[i]!;
+      const cookie = cf ? `sso-rw=${t.token};sso=${t.token};${cf}` : `sso-rw=${t.token};sso=${t.token}`;
+      try {
+        const r = await checkRateLimits(cookie, settings.grok, "grok-4-fast");
+        if (r) {
+          const remaining = (r as any).remainingTokens;
+          if (typeof remaining === "number") await updateTokenLimits(db, t.token, { remaining_queries: remaining });
+          success += 1;
+        } else {
+          failed += 1;
+        }
+      } catch {
+        failed += 1;
+      }
+      await setRefreshProgress(db, { running: true, current: i + 1, total: batch.length, success, failed });
     }
 
-    return c.json({ success: true, message: "刷新任务已启动", data: { started: true } });
+    await setRefreshProgress(db, { running: false, current: batch.length, total: batch.length, success, failed });
+
+    const remaining = totalRemaining - batch.length;
+    const message = remaining > 0
+      ? `已刷新 ${batch.length} 个 (成功${success}/失败${failed})，还有 ${remaining} 个待刷新，请再次点击`
+      : `刷新完成: 成功 ${success} 个, 失败 ${failed} 个`;
+
+    return c.json({ success: true, message, data: { processed: batch.length, success, failed, remaining } });
   } catch (e) {
     return c.json(jsonError(`刷新失败: ${e instanceof Error ? e.message : String(e)}`, "REFRESH_ALL_ERROR"), 500);
   }
@@ -749,71 +772,80 @@ adminRoutes.post("/api/tavily/keys/test", requireAdminAuth, async (c) => {
 
 adminRoutes.post("/api/tavily/keys/sync", requireAdminAuth, async (c) => {
   try {
-    const progress = await getTavilySyncProgress(c.env.DB);
-    if (progress.running) {
-      return c.json({ success: false, message: "同步任务正在进行中", data: progress });
+    const STUCK_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
+    const BATCH_SIZE = 20;
+    const db = c.env.DB;
+
+    const progress = await getTavilySyncProgress(db);
+
+    // Reset if stuck for more than 2 minutes
+    if (progress.running && progress.updated_at) {
+      const elapsed = Date.now() - progress.updated_at;
+      if (elapsed > STUCK_TIMEOUT_MS) {
+        await setTavilySyncProgress(db, { running: false });
+      } else {
+        return c.json({ success: false, message: "同步任务正在进行中", data: progress });
+      }
     }
 
-    const keys = await listTavilyKeys(c.env.DB);
-    await setTavilySyncProgress(c.env.DB, {
+    const allKeys = await listTavilyKeys(db);
+    // Filter out invalid keys, sort by last_sync_at ascending (oldest first)
+    const keysToSync = allKeys
+      .filter((k) => !k.is_invalid)
+      .sort((a, b) => {
+        // Prioritize keys never synced (last_sync_at = null), then oldest sync first
+        const aSync = a.last_sync_at ?? 0;
+        const bSync = b.last_sync_at ?? 0;
+        return aSync - bSync;
+      });
+
+    if (!keysToSync.length) {
+      return c.json({ success: true, message: "没有需要同步的 Key", data: { processed: 0, remaining: 0 } });
+    }
+
+    const batch = keysToSync.slice(0, BATCH_SIZE);
+    const totalRemaining = keysToSync.length;
+
+    await setTavilySyncProgress(db, {
       running: true,
       current: 0,
-      total: keys.length,
+      total: batch.length,
       success: 0,
       failed: 0,
     });
 
-    const db = c.env.DB;
-    const runSync = async () => {
-      let success = 0;
-      let failed = 0;
+    let success = 0;
+    let failed = 0;
+
+    for (let i = 0; i < batch.length; i++) {
+      const k = batch[i]!;
       try {
-        for (let i = 0; i < keys.length; i++) {
-          const k = keys[i]!;
-          if (k.is_invalid) {
-            failed++;
-            await setTavilySyncProgress(db, { current: i + 1, success, failed });
-            continue;
-          }
-
-          try {
-            const result = await checkTavilyKeyUsage(k.key);
-            if (result.valid && typeof result.usage === "number") {
-              const usageUpdate: { usedQuota: number; totalQuota?: number } = { usedQuota: result.usage };
-              if (typeof result.limit === "number") usageUpdate.totalQuota = result.limit;
-              await updateTavilyKeyUsage(db, k.key, usageUpdate);
-              success++;
-            } else if (result.reason === "deactivated" || result.reason === "unauthorized") {
-              await markTavilyKeyInvalid(db, k.key, result.reason);
-              failed++;
-            } else {
-              failed++;
-            }
-          } catch {
-            failed++;
-          }
-
-          await setTavilySyncProgress(db, { current: i + 1, success, failed });
-          await new Promise((res) => setTimeout(res, 200));
+        const result = await checkTavilyKeyUsage(k.key);
+        if (result.valid && typeof result.usage === "number") {
+          const usageUpdate: { usedQuota: number; totalQuota?: number } = { usedQuota: result.usage };
+          if (typeof result.limit === "number") usageUpdate.totalQuota = result.limit;
+          await updateTavilyKeyUsage(db, k.key, usageUpdate);
+          success++;
+        } else if (result.reason === "deactivated" || result.reason === "unauthorized") {
+          await markTavilyKeyInvalid(db, k.key, result.reason);
+          failed++;
+        } else {
+          failed++;
         }
-      } finally {
-        await setTavilySyncProgress(db, {
-          running: false,
-          current: keys.length,
-          total: keys.length,
-          success,
-          failed,
-        });
+      } catch {
+        failed++;
       }
-    };
-
-    if (c.executionCtx?.waitUntil) {
-      c.executionCtx.waitUntil(runSync());
-    } else {
-      runSync().catch(() => {});
+      await setTavilySyncProgress(db, { running: true, current: i + 1, total: batch.length, success, failed });
     }
 
-    return c.json({ success: true, message: "同步任务已启动", data: { started: true } });
+    await setTavilySyncProgress(db, { running: false, current: batch.length, total: batch.length, success, failed });
+
+    const remaining = totalRemaining - batch.length;
+    const message = remaining > 0
+      ? `已同步 ${batch.length} 个 (成功${success}/失败${failed})，还有 ${remaining} 个待同步，请再次点击`
+      : `同步完成: 成功 ${success} 个, 失败 ${failed} 个`;
+
+    return c.json({ success: true, message, data: { processed: batch.length, success, failed, remaining } });
   } catch (e) {
     return c.json(jsonError(`同步失败: ${e instanceof Error ? e.message : String(e)}`, "TAVILY_SYNC_ERROR"), 500);
   }
