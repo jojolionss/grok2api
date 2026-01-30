@@ -279,7 +279,7 @@
         <button onclick="switchTab('statistics')" id="tabStatistics"
           class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">请求统计</button>
         <button onclick="switchTab('keys')" id="tabKeys"
-          class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">Key 管理</button>
+          class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">Access Keys</button>
         <button onclick="switchTab('logs')" id="tabLogs"
           class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">日志审计</button>
         <button onclick="switchTab('cache')" id="tabCache"
@@ -287,7 +287,7 @@
         <button onclick="switchTab('settings')" id="tabSettings"
           class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">Setting 配置</button>
         <button onclick="switchTab('tavily')" id="tabTavily"
-          class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">Tavily Keys</button>
+          class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">Tavily Pool</button>
       </nav>
     </div>
 
@@ -459,11 +459,16 @@
       </div>
     </div>
 
-    <!-- Key 管理面板 -->
+    <!-- Access Keys 面板 -->
     <div id="panelKeys" class="hidden">
       <!-- 工具栏 -->
       <div class="flex items-center justify-between gap-4 mb-6">
-        <h2 class="text-xl font-bold">Key Management</h2>
+        <div>
+          <h2 class="text-xl font-bold flex items-center gap-2">Access Keys
+            <span class="text-xs font-normal px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">Grok + Tavily</span>
+          </h2>
+          <p class="text-xs text-muted-foreground mt-1">一个 Key 同时支持 /v1/* (Grok) 和 /tavily/*, /search (Tavily) 路由</p>
+        </div>
         <div class="flex items-center gap-2">
           <button onclick="loadKeys()" class="btn-icon" title="刷新列表">
             <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
@@ -998,8 +1003,13 @@
       </div>
     </div>
 
-    <!-- Tavily Keys 管理面板 -->
+    <!-- Tavily Pool 管理面板 -->
     <div id="panelTavily" class="hidden">
+      <!-- 标题 -->
+      <div class="mb-4">
+        <h2 class="text-xl font-bold">Tavily Key Pool</h2>
+        <p class="text-sm text-muted-foreground">内部 API Key 池，服务器自动选择最优 Key 处理搜索请求</p>
+      </div>
       <!-- 统计卡片 -->
       <div class="grid gap-4 grid-cols-2 md:grid-cols-5 mb-6">
         <div class="rounded-lg border border-border bg-background p-4">

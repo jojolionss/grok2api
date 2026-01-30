@@ -227,16 +227,26 @@ export async function getAllTavilyTags(db: Env["DB"]): Promise<string[]> {
 }
 
 export async function selectBestTavilyKey(db: Env["DB"]): Promise<string | null> {
-  const row = await dbFirst<{ key: string }>(
+  // Get all candidates sorted by remaining quota DESC
+  const candidates = await dbAll<{ key: string; remaining: number }>(
     db,
-    `SELECT key FROM tavily_keys
+    `SELECT key, (total_quota - used_quota) as remaining 
+     FROM tavily_keys
      WHERE is_active = 1 AND is_invalid = 0 AND failed_count < ?
        AND (total_quota - used_quota) > 0
-     ORDER BY (total_quota - used_quota) DESC, created_at ASC
-     LIMIT 1`,
+     ORDER BY remaining DESC`,
     [MAX_FAILURES]
   );
-  return row?.key ?? null;
+
+  if (!candidates.length) return null;
+
+  // Get keys with highest remaining quota (randomize among equals to prevent hot spots)
+  const maxRemaining = candidates[0]!.remaining;
+  const topCandidates = candidates.filter((c) => c.remaining === maxRemaining);
+
+  // Random selection from top tier for fairness
+  const selected = topCandidates[Math.floor(Math.random() * topCandidates.length)];
+  return selected?.key ?? null;
 }
 
 export async function updateTavilyKeyUsage(
@@ -290,9 +300,12 @@ export async function recordTavilyKeyFailure(
     [reason, key]
   );
 
+  // Immediate marking based on status code (TavilyProxyManager style)
   if (status === 401) {
+    // 401 = unauthorized - key is invalid
     await markTavilyKeyInvalid(db, key, "unauthorized");
-  } else if (status === 402 || status === 429) {
+  } else if (status === 402 || status === 429 || status === 432 || status === 433) {
+    // 402/429/432/433 = rate limit or quota exhausted - mark as depleted
     await dbRun(db, "UPDATE tavily_keys SET used_quota = total_quota WHERE key = ?", [key]);
   }
 }

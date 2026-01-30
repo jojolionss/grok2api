@@ -4,14 +4,17 @@ import type { EdgeEnv } from "./env";
 const app = new Hono<{ Bindings: EdgeEnv }>();
 
 // API routes - forward to backend via Service Binding
-const API_PREFIXES = ["/v1/", "/api/", "/images/", "/health", "/tavily/"];
+const API_PREFIXES = ["/v1/", "/api/", "/images/", "/tavily/"];
+const API_EXACT = ["/health", "/search", "/mcp"];
 
 app.all("*", async (c) => {
   const url = new URL(c.req.url);
   const pathname = url.pathname;
 
   // Forward API requests to backend
-  if (API_PREFIXES.some((p) => pathname.startsWith(p) || pathname === p.slice(0, -1))) {
+  const isApiPrefix = API_PREFIXES.some((p) => pathname.startsWith(p) || pathname === p.slice(0, -1));
+  const isApiExact = API_EXACT.includes(pathname);
+  if (isApiPrefix || isApiExact) {
     return c.env.BACKEND.fetch(c.req.raw);
   }
 
