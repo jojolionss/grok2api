@@ -23,6 +23,7 @@ import {
   updateTokenNote,
   updateTokenTags,
   updateTokenLimits,
+  resetTokenHealth,
 } from "../repo/tokens";
 import {
   addTavilyKeys,
@@ -228,6 +229,7 @@ adminRoutes.post("/api/tokens/test", requireAdminAuth, async (c) => {
       const remaining = (result as any).remainingTokens ?? -1;
       const limit = (result as any).limit ?? -1;
       await updateTokenLimits(c.env.DB, token, { remaining_queries: typeof remaining === "number" ? remaining : -1 });
+      await resetTokenHealth(c.env.DB, token);
       return c.json({
         success: true,
         message: "Token有效",
@@ -293,22 +295,20 @@ adminRoutes.post("/api/tokens/refresh-all", requireAdminAuth, async (c) => {
     }
 
     const allTokens = await listTokens(db);
-    // Filter out expired tokens, prioritize "未使用" (remaining_queries = -1) first
+    // Filter out expired tokens, sort by last_refresh_at ASC (oldest/never refreshed first)
     const tokensToRefresh = allTokens
       .filter((t) => t.status !== "expired")
       .sort((a, b) => {
-        // Prioritize tokens with remaining_queries = -1 (never refreshed)
-        const aNotRefreshed = a.remaining_queries === -1 ? 0 : 1;
-        const bNotRefreshed = b.remaining_queries === -1 ? 0 : 1;
-        return aNotRefreshed - bNotRefreshed;
+        // Prioritize tokens never refreshed (last_refresh_at = null), then oldest refresh first
+        const aRefresh = a.last_refresh_at ?? 0;
+        const bRefresh = b.last_refresh_at ?? 0;
+        return aRefresh - bRefresh;
       });
 
     if (!tokensToRefresh.length) {
       return c.json({ success: true, message: "没有需要刷新的 Token", data: { processed: 0, remaining: 0 } });
     }
 
-    // Count how many are "未使用" (never refreshed)
-    const notRefreshedCount = tokensToRefresh.filter((t) => t.remaining_queries === -1).length;
     const batch = tokensToRefresh.slice(0, BATCH_SIZE);
     const totalRemaining = tokensToRefresh.length;
 
@@ -334,6 +334,7 @@ adminRoutes.post("/api/tokens/refresh-all", requireAdminAuth, async (c) => {
         if (r) {
           const remaining = (r as any).remainingTokens;
           if (typeof remaining === "number") await updateTokenLimits(db, t.token, { remaining_queries: remaining });
+          await resetTokenHealth(db, t.token);
           success += 1;
         } else {
           failed += 1;

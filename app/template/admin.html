@@ -1666,9 +1666,7 @@
             last_failure_reason: t.last_failure_reason || '',
             limit_reason: t.limit_reason || ''
           }));
-          filteredTokens = allTokens;
-          selectedTokens.clear();
-          renderTokens();
+          filterTokens();
           updateRemaining();
           await loadAllTags();
         }
@@ -1724,33 +1722,29 @@
       }).join('');
       updateBatchActions();
     };
-    const toggleToken = t => selectedTokens[selectedTokens.has(t) ? 'delete' : 'add'](t) || updateBatchActions();
+    const toggleToken = t => { selectedTokens.has(t) ? selectedTokens.delete(t) : selectedTokens.add(t); updateBatchActions(); };
     const toggleSelectAll = () => { const sa = $('selectAll'); sa.checked ? filteredTokens.forEach(t => selectedTokens.add(t.token)) : selectedTokens.clear(); renderTokens() };
     const updateBatchActions = () => { const ba = $('batchActions'), sc = $('selectedCount'), c = selectedTokens.size; ba.classList[c > 0 ? 'add' : 'remove']('flex'); ba.classList[c > 0 ? 'remove' : 'add']('hidden'); c > 0 && (sc.textContent = `已选择 ${c} 项`); $('selectAll').checked = filteredTokens.length > 0 && c === filteredTokens.length };
     const filterTokens = () => { const tf = $('filterType').value, sf = $('filterStatus').value, tagf = $('filterTag').value; filteredTokens = allTokens.filter(t => (tf === 'all' || t.token_type === tf) && (sf === 'all' || t.status === sf) && (tagf === 'all' || t.tags && t.tags.includes(tagf))); selectedTokens.clear(); renderTokens() };
     const loadAllTags = async () => { try { const r = await apiRequest('/api/tokens/tags/all'); if (!r) return; const d = await r.json(); if (d.success) { allTagsList = d.data; const tagFilter = $('filterTag'); const currentValue = tagFilter.value; tagFilter.innerHTML = '<option value="all">全部标签</option>' + allTagsList.map(tag => `<option value="${tag}">${tag}</option>`).join(''); tagFilter.value = currentValue } } catch (e) { console.error('加载标签列表失败:', e) } };
     const refreshTokens = async () => { await loadTokens(); await loadStats() };
     const refreshAllTokens = async () => {
-      if (!confirm('刷新 Token 剩余次数？每次处理 20 个，如有更多需多次点击')) return;
-
+      if (!confirm('刷新所有 Token 剩余次数？')) return;
+      let total = 0, success = 0, failed = 0;
       try {
-        showToast('正在刷新...', 'info');
-        const r = await apiRequest('/api/tokens/refresh-all', { method: 'POST' });
-        if (!r) return;
-        const d = await r.json();
-
-        if (!d.success) {
-          showToast(d.message || '刷新失败', 'error');
-          return;
+        while (true) {
+          showToast(`正在刷新... 已处理 ${total}`, 'info');
+          const r = await apiRequest('/api/tokens/refresh-all', { method: 'POST' });
+          if (!r) break;
+          const d = await r.json();
+          if (!d.success) { showToast(d.message || '刷新失败', 'error'); break; }
+          total += d.data?.processed || 0;
+          success += d.data?.success || 0;
+          failed += d.data?.failed || 0;
+          if (!d.data?.remaining || d.data.remaining <= 0) break;
+          await new Promise(r => setTimeout(r, 500));
         }
-
-        const { remaining } = d.data || {};
-        if (remaining > 0) {
-          showToast(d.message, 'info');
-        } else {
-          showToast(d.message, 'success');
-        }
-
+        showToast(`全部完成: 成功 ${success}, 失败 ${failed}`, 'success');
         await refreshTokens();
       } catch (e) {
         showToast('刷新失败: ' + e.message, 'error');
@@ -2007,9 +2001,7 @@
         const d = await r.json();
         if (d.success) {
           allTavilyKeys = d.data;
-          filteredTavilyKeys = allTavilyKeys;
-          selectedTavilyKeys.clear();
-          renderTavilyKeys();
+          filterTavilyKeys();
         }
       } catch (e) { console.error('Load Tavily keys failed:', e); }
     };
@@ -2118,50 +2110,66 @@
     const refreshTavilyKeys = async () => { await loadTavilyKeys(); await loadTavilyStats(); };
 
     const syncAllTavilyKeys = async () => {
-      showToast('正在同步...', 'info');
+      if (!confirm('同步所有 Tavily Key 配额？')) return;
+      let total = 0, success = 0, failed = 0;
       try {
-        const r = await apiRequest('/api/tavily/keys/sync', {method:'POST'});
-        const d = await r.json();
-        if (d.success) {
-          const { remaining } = d.data || {};
-          if (remaining > 0) {
-            showToast(d.message, 'info');
-          } else {
-            showToast(d.message, 'success');
-          }
-          await refreshTavilyKeys();
-        } else {
-          showToast(d.message || '同步失败', 'error');
+        while (true) {
+          showToast(`正在同步... 已处理 ${total}`, 'info');
+          const r = await apiRequest('/api/tavily/keys/sync', {method:'POST'});
+          if (!r) break;
+          const d = await r.json();
+          if (!d.success) { showToast(d.message || '同步失败', 'error'); break; }
+          total += d.data?.processed || 0;
+          success += d.data?.success || 0;
+          failed += d.data?.failed || 0;
+          if (!d.data?.remaining || d.data.remaining <= 0) break;
+          await new Promise(r => setTimeout(r, 500));
         }
+        showToast(`全部完成: 成功 ${success}, 失败 ${failed}`, 'success');
+        await refreshTavilyKeys();
       } catch (e) { showToast('同步失败: '+e.message, 'error'); }
     };
 
     const testTavilyKey = async (key) => {
       try {
         const r = await apiRequest('/api/tavily/keys/test', {method:'POST', body:JSON.stringify({key})});
+        if (!r) return;
         const d = await r.json();
         if (d.success && d.data.valid) {
           showToast(`Key有效! 剩余: ${d.data.remaining}/${d.data.limit}`, 'success');
-          await refreshTavilyKeys();
         } else {
           showToast(`Key无效: ${d.data?.reason||d.message}`, 'error');
         }
+        await refreshTavilyKeys();
       } catch (e) { showToast('测试失败: '+e.message, 'error'); }
     };
 
     const toggleTavilyActive = async (key, isActive) => {
       try {
-        await apiRequest('/api/tavily/keys/toggle', {method:'POST', body:JSON.stringify({key, is_active:isActive})});
-        await refreshTavilyKeys();
+        const r = await apiRequest('/api/tavily/keys/toggle', {method:'POST', body:JSON.stringify({key, is_active:isActive})});
+        if (!r) return;
+        const d = await r.json();
+        if (d.success) {
+          showToast(isActive ? '已启用' : '已禁用', 'success');
+          await refreshTavilyKeys();
+        } else {
+          showToast(d.message || '操作失败', 'error');
+        }
       } catch (e) { showToast('操作失败: '+e.message, 'error'); }
     };
 
     const deleteTavilyKey = async (key) => {
       if (!confirm('确定要删除这个Key吗?')) return;
       try {
-        await apiRequest('/api/tavily/keys/delete', {method:'POST', body:JSON.stringify({keys:[key]})});
-        await refreshTavilyKeys();
-        showToast('删除成功', 'success');
+        const r = await apiRequest('/api/tavily/keys/delete', {method:'POST', body:JSON.stringify({keys:[key]})});
+        if (!r) return;
+        const d = await r.json();
+        if (d.success) {
+          showToast('删除成功', 'success');
+          await refreshTavilyKeys();
+        } else {
+          showToast(d.message || '删除失败', 'error');
+        }
       } catch (e) { showToast('删除失败: '+e.message, 'error'); }
     };
 
