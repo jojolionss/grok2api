@@ -1,0 +1,25 @@
+name = "grok2api-backend"
+main = "src/backend.ts"
+compatibility_date = "2026-01-28"
+
+# Placement to bypass geo-restrictions (e.g., Grok API access from US)
+[placement]
+mode = "smart"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "grok2api"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+[[kv_namespaces]]
+binding = "KV_CACHE"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[vars]
+CACHE_RESET_TZ_OFFSET_MINUTES = "480"
+KV_CACHE_MAX_BYTES = "26214400"
+KV_CLEANUP_BATCH = "200"
+
+[triggers]
+crons = ["0 16 * * *"]

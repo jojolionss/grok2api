@@ -1,0 +1,11 @@
+name = "grok2api-edge"
+main = "src/edge.ts"
+compatibility_date = "2026-01-28"
+
+# Static assets (admin UI) - only works without placement
+assets = { directory = "./app/template", binding = "ASSETS" }
+
+# Service binding to backend worker
+[[services]]
+binding = "BACKEND"
+service = "grok2api-backend"

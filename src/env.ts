@@ -13,3 +13,9 @@ export interface Env {
   // Batch size for daily cleanup
   KV_CLEANUP_BATCH?: string;
 }
+
+// Edge Worker environment (no DB/KV, only assets and backend binding)
+export interface EdgeEnv {
+  ASSETS: Fetcher;
+  BACKEND: Fetcher;
+}
