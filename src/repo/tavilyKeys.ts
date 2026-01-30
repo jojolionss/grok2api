@@ -395,32 +395,65 @@ export async function setTavilySyncProgress(
   }
 }
 
-export async function checkTavilyKeyUsage(
-  key: string
-): Promise<{ valid: boolean; usage?: number; limit?: number; reason?: string }> {
+export interface TavilyKeyCheckResult {
+  valid: boolean;
+  usage?: number;
+  limit?: number;
+  reason?: string;
+  status?: number;
+}
+
+export async function checkTavilyKeyUsage(key: string): Promise<TavilyKeyCheckResult> {
+  const TIMEOUT_MS = 10000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
   try {
     const resp = await fetch("https://api.tavily.com/usage", {
       method: "GET",
       headers: { Authorization: `Bearer ${key}` },
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
-    if (resp.status === 200) {
-      const data = (await resp.json()) as { key?: { usage?: number; limit?: number } };
-      return {
-        valid: true,
-        usage: data.key?.usage ?? 0,
-        limit: data.key?.limit ?? 1000,
-      };
-    } else if (resp.status === 401) {
-      const text = await resp.text();
-      const reason = text.toLowerCase().includes("deactivated") ? "deactivated" : "unauthorized";
-      return { valid: false, reason };
-    } else if (resp.status === 429) {
-      return { valid: true, reason: "rate_limited" };
+    const status = resp.status;
+
+    if (status === 200) {
+      // 200 OK = key is valid, can get usage data
+      const data = await resp.json();
+      // Runtime validation
+      if (typeof data !== "object" || data === null) {
+        return { valid: false, reason: "invalid_response", status };
+      }
+      const keyData = (data as Record<string, unknown>).key;
+      const usage = typeof (keyData as Record<string, unknown>)?.usage === "number"
+        ? ((keyData as Record<string, unknown>).usage as number)
+        : 0;
+      const limit = typeof (keyData as Record<string, unknown>)?.limit === "number"
+        ? ((keyData as Record<string, unknown>).limit as number)
+        : 1000;
+      return { valid: true, usage, limit, status };
+    } else if (status === 401) {
+      // 401 = unauthorized (key invalid or deactivated)
+      return { valid: false, reason: "unauthorized", status };
+    } else if (status === 429) {
+      // 429 = rate limited, can't verify - mark as unverifiable (not valid)
+      return { valid: false, reason: "rate_limited", status };
+    } else if (status === 432 || status === 433) {
+      // 432/433 = quota exhausted - key is valid but depleted
+      return { valid: true, reason: "exhausted", status };
     } else {
-      return { valid: false, reason: `http_${resp.status}` };
+      return { valid: false, reason: `http_${status}`, status };
     }
   } catch (e) {
-    return { valid: false, reason: e instanceof Error ? e.message : String(e) };
+    clearTimeout(timeoutId);
+    if (e instanceof Error && e.name === "AbortError") {
+      return { valid: false, reason: "timeout" };
+    }
+    return { valid: false, reason: "network_error" };
   }
+}
+
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

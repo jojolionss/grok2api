@@ -1282,17 +1282,28 @@
         </div>
         <div class="space-y-2">
           <label class="text-sm font-medium text-muted-foreground">Tavily Key 列表 <span class="text-muted-foreground">(每行一个，格式: tvly-xxx)</span></label>
-          <textarea id="addTavilyKeyList" rows="12" placeholder="请输入 Tavily API Key，每行一个"
+          <textarea id="addTavilyKeyList" rows="10" placeholder="请输入 Tavily API Key，每行一个"
             class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring font-mono resize-none"></textarea>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="checkbox" id="skipTavilyValidation" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary">
+          <label for="skipTavilyValidation" class="text-sm text-muted-foreground">跳过验证（快速导入，不检测有效性）</label>
+        </div>
+        <div id="tavilyImportProgress" class="hidden p-3 bg-muted rounded-md border border-border">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm font-medium" id="tavilyImportStatus">验证中...</span>
+            <span class="text-xs text-muted-foreground" id="tavilyImportCount">0/0</span>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-2">
+            <div id="tavilyImportBar" class="bg-primary h-2 rounded-full transition-all" style="width: 0%"></div>
+          </div>
         </div>
       </div>
       <div class="flex items-center justify-end gap-3 p-5 border-t border-border bg-muted/30">
         <button onclick="closeAddTavilyModal()"
           class="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors border border-input bg-background hover:bg-accent h-9 px-5">取消</button>
-        <button onclick="validateAndAddTavilyKeys()"
-          class="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors border border-primary text-primary hover:bg-primary/10 h-9 px-5">先验证再添加</button>
-        <button onclick="submitAddTavilyKeys()"
-          class="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-5">直接添加</button>
+        <button id="btnAddTavilyKeys" onclick="addTavilyKeysWithValidation()"
+          class="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-5">添加</button>
       </div>
     </div>
   </div>
@@ -2187,86 +2198,126 @@
 
     const isValidTavilyKey = (k) => /^tvly-[A-Za-z0-9_-]{8,64}$/.test(k);
     
-    const submitAddTavilyKeys = async () => {
+    const showTavilyImportProgress = (show, status = '', current = 0, total = 0) => {
+      const el = $('tavilyImportProgress');
+      if (show) {
+        el.classList.remove('hidden');
+        $('tavilyImportStatus').textContent = status;
+        $('tavilyImportCount').textContent = `${current}/${total}`;
+        $('tavilyImportBar').style.width = total > 0 ? `${Math.round(current/total*100)}%` : '0%';
+      } else {
+        el.classList.add('hidden');
+      }
+    };
+    
+    const setAddBtnEnabled = (enabled) => {
+      const btn = $('btnAddTavilyKeys');
+      btn.disabled = !enabled;
+      btn.classList.toggle('opacity-50', !enabled);
+      btn.classList.toggle('cursor-not-allowed', !enabled);
+    };
+
+    const addTavilyKeysWithValidation = async () => {
       const rawKeys = $('addTavilyKeyList').value.split('\n').map(k=>k.trim()).filter(Boolean);
       const aliasPrefix = $('addTavilyAliasPrefix').value.trim();
+      const skipValidation = $('skipTavilyValidation').checked;
+      
       if (!rawKeys.length) return showToast('请输入Key', 'error');
       
-      const validKeys = rawKeys.filter(isValidTavilyKey);
-      const invalidKeys = rawKeys.filter(k => !isValidTavilyKey(k));
+      const formatValid = rawKeys.filter(isValidTavilyKey);
+      const formatInvalid = rawKeys.filter(k => !isValidTavilyKey(k));
       
-      if (invalidKeys.length > 0 && validKeys.length === 0) {
-        return showToast(`全部 ${invalidKeys.length} 个 Key 格式无效 (需以 tvly- 开头)`, 'error');
+      if (!formatValid.length) {
+        return showToast(`全部 ${rawKeys.length} 个 Key 格式无效 (需以 tvly- 开头)`, 'error');
       }
       
-      if (invalidKeys.length > 0) {
-        const proceed = confirm(`检测到 ${invalidKeys.length} 个无效格式的 Key (需以 tvly- 开头):\n${invalidKeys.slice(0,3).join('\n')}${invalidKeys.length>3?'\n...':''}\n\n是否仅添加 ${validKeys.length} 个有效 Key?`);
+      if (formatInvalid.length > 0) {
+        const proceed = confirm(`检测到 ${formatInvalid.length} 个格式无效的 Key (需以 tvly- 开头)\n\n是否继续添加 ${formatValid.length} 个格式正确的 Key?`);
         if (!proceed) return;
       }
       
-      try {
-        const r = await apiRequest('/api/tavily/keys/add', {method:'POST', body:JSON.stringify({keys: validKeys, alias_prefix:aliasPrefix})});
-        if (!r) return;
-        const d = await r.json();
-        if (d.success) {
-          let msg = d.message;
-          if (invalidKeys.length > 0) msg += ` (前端过滤无效: ${invalidKeys.length})`;
-          showToast(msg, 'success');
-          closeAddTavilyModal();
-          $('addTavilyKeyList').value = '';
-          $('addTavilyAliasPrefix').value = '';
-          await refreshTavilyKeys();
-        } else {
-          showToast(d.message || '添加失败', 'error');
-        }
-      } catch (e) { showToast('添加失败: '+e.message, 'error'); }
-    };
-
-    const validateAndAddTavilyKeys = async () => {
-      const rawKeys = $('addTavilyKeyList').value.split('\n').map(k=>k.trim()).filter(Boolean);
-      const aliasPrefix = $('addTavilyAliasPrefix').value.trim();
-      if (!rawKeys.length) return showToast('请输入Key', 'error');
-
-      const formatValid = rawKeys.filter(isValidTavilyKey);
-      if (!formatValid.length) return showToast(`全部 ${rawKeys.length} 个 Key 格式无效`, 'error');
-
-      showToast(`正在验证 ${formatValid.length} 个 Key...`, 'info');
+      setAddBtnEnabled(false);
       
       try {
-        const r = await apiRequest('/api/tavily/keys/validate', {method:'POST', body:JSON.stringify({keys: formatValid})});
-        if (!r) return;
-        const d = await r.json();
-        if (!d.success) { showToast(d.message || '验证失败', 'error'); return; }
-
-        const { valid, invalid } = d.data;
-        if (!valid.length) {
-          const reasons = invalid.slice(0, 5).map(i => `${i.key.substring(0,20)}...: ${i.reason}`).join('\n');
-          showToast(`全部 ${invalid.length} 个 Key 无效:\n${reasons}`, 'error');
-          return;
-        }
-
-        let msg = `验证完成: ${valid.length} 有效`;
-        if (invalid.length > 0) {
-          msg += `, ${invalid.length} 无效 (已过滤)`;
-          const reasons = invalid.slice(0, 3).map(i => `${i.key.substring(0,15)}...: ${i.reason}`).join('\n');
-          msg += `\n${reasons}${invalid.length > 3 ? '\n...' : ''}`;
-        }
-        
-        if (!confirm(msg + `\n\n是否添加 ${valid.length} 个有效 Key?`)) return;
-
-        const r2 = await apiRequest('/api/tavily/keys/add', {method:'POST', body:JSON.stringify({keys: valid, alias_prefix:aliasPrefix})});
-        if (!r2) return;
-        const d2 = await r2.json();
-        if (d2.success) {
-          showToast(d2.message, 'success');
-          closeAddTavilyModal();
-          $('addTavilyKeyList').value = '';
-          $('addTavilyAliasPrefix').value = '';
-          await refreshTavilyKeys();
+        if (skipValidation) {
+          // Direct add without validation
+          showTavilyImportProgress(true, '正在添加...', 0, formatValid.length);
+          const r = await apiRequest('/api/tavily/keys/add', {method:'POST', body:JSON.stringify({keys: formatValid, alias_prefix:aliasPrefix})});
+          if (!r) { setAddBtnEnabled(true); showTavilyImportProgress(false); return; }
+          const d = await r.json();
+          showTavilyImportProgress(false);
+          if (d.success) {
+            showToast(`${d.message}${formatInvalid.length > 0 ? ` (格式无效: ${formatInvalid.length})` : ''}`, 'success');
+            closeAddTavilyModal();
+            $('addTavilyKeyList').value = '';
+            $('addTavilyAliasPrefix').value = '';
+            $('skipTavilyValidation').checked = false;
+            await refreshTavilyKeys();
+          } else {
+            showToast(d.message || '添加失败', 'error');
+          }
         } else {
-          showToast(d2.message || '添加失败', 'error');
+          // Validate first, then add valid keys
+          showTavilyImportProgress(true, `验证中 (约 ${Math.ceil(formatValid.length / 2)} 秒)...`, 0, formatValid.length);
+          
+          const r = await apiRequest('/api/tavily/keys/validate', {
+            method:'POST', 
+            body:JSON.stringify({keys: formatValid, add_valid: true, alias_prefix: aliasPrefix})
+          });
+          if (!r) { setAddBtnEnabled(true); showTavilyImportProgress(false); return; }
+          const d = await r.json();
+          showTavilyImportProgress(false);
+          
+          if (!d.success) { 
+            showToast(d.message || '验证失败', 'error'); 
+            setAddBtnEnabled(true);
+            return; 
+          }
+
+      if (!d.data) {
+        showToast('服务器返回数据格式错误', 'error');
+        setAddBtnEnabled(true);
+        return;
+      }
+      const { valid = [], unverifiable = [], invalid = [], added = 0, skipped = 0 } = d.data;
+      const validCount = valid.length;
+      const unverifiableCount = unverifiable.length;
+      const invalidCount = invalid.length;
+      
+      let msg = `验证完成:\n`;
+      msg += `• 有效: ${validCount} 个\n`;
+      if (unverifiableCount > 0) {
+        msg += `• 无法验证 (限流/超时): ${unverifiableCount} 个\n`;
+      }
+      msg += `• 无效: ${invalidCount} 个`;
+      if (invalidCount > 0) {
+        const safeStr = (s) => String(s).replace(/[<>'"]/g, '');
+        const reasons = invalid.slice(0, 3).map(i => `  - ${safeStr(i.key).substring(0,20)}...: ${safeStr(i.reason)}`).join('\n');
+        msg += `\n${reasons}${invalidCount > 3 ? '\n  ...' : ''}`;
+      }
+      msg += `\n\n已添加: ${added} 个, 重复跳过: ${skipped} 个`;
+      if (formatInvalid.length > 0) msg += `\n格式无效: ${formatInvalid.length} 个`;
+      if (unverifiableCount > 0) msg += `\n\n提示: 无法验证的 Key 未添加，可稍后重试`;
+      
+      if (added > 0) {
+        showToast(`成功添加 ${added} 个 Key`, 'success');
+        closeAddTavilyModal();
+        $('addTavilyKeyList').value = '';
+        $('addTavilyAliasPrefix').value = '';
+        $('skipTavilyValidation').checked = false;
+        await refreshTavilyKeys();
+      } else if (validCount > 0) {
+        showToast(`${validCount} 个有效 Key 均已存在`, 'info');
+      } else {
+        alert(msg);
+      }
         }
-      } catch (e) { showToast('验证失败: '+e.message, 'error'); }
+      } catch (e) { 
+        showTavilyImportProgress(false);
+        showToast('操作失败: '+e.message, 'error'); 
+      } finally {
+        setAddBtnEnabled(true);
+      }
     };
     
     const batchDeleteTavilyKeys = async () => {

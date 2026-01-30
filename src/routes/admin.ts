@@ -36,6 +36,7 @@ import {
   listTavilyKeys,
   markTavilyKeyInvalid,
   setTavilySyncProgress,
+  sleep,
   tavilyKeyRowToInfo,
   updateTavilyKeyActive,
   updateTavilyKeyNote,
@@ -668,41 +669,85 @@ adminRoutes.post("/api/tavily/keys/add", requireAdminAuth, async (c) => {
 
 adminRoutes.post("/api/tavily/keys/validate", requireAdminAuth, async (c) => {
   try {
-    const body = (await c.req.json()) as { keys?: string[] };
+    const body = (await c.req.json()) as { keys?: string[]; add_valid?: boolean; alias_prefix?: string };
     const rawKeys = Array.isArray(body.keys) ? body.keys : [];
+    const addValid = Boolean(body.add_valid);
+    const aliasPrefix = String(body.alias_prefix ?? "").trim();
     
-    // Filter valid format keys
+    // Validate aliasPrefix
+    const ALIAS_PREFIX_REGEX = /^[a-zA-Z0-9_-]{0,32}$/;
+    if (aliasPrefix && !ALIAS_PREFIX_REGEX.test(aliasPrefix)) {
+      return c.json(jsonError("别名前缀只能包含字母、数字、下划线和连字符，最长32字符", "INVALID_ALIAS_PREFIX"), 400);
+    }
+    
+    // Filter valid format keys and deduplicate
     const TAVILY_KEY_REGEX = /^tvly-[A-Za-z0-9_-]{8,64}$/;
-    const keysToValidate = rawKeys
-      .map((k) => (typeof k === "string" ? k.trim() : ""))
-      .filter((k) => k && TAVILY_KEY_REGEX.test(k));
+    const keysToValidate = Array.from(new Set(
+      rawKeys
+        .map((k) => (typeof k === "string" ? k.trim() : ""))
+        .filter((k) => k && TAVILY_KEY_REGEX.test(k))
+    ));
+    
+    const formatInvalid = rawKeys.length - keysToValidate.length;
     
     if (!keysToValidate.length) {
-      return c.json({ success: true, data: { valid: [], invalid: [], formatInvalid: rawKeys.length } });
+      return c.json({ success: true, data: { valid: [], invalid: [], unverifiable: [], formatInvalid, added: 0 } });
     }
 
-    const valid: string[] = [];
-    const invalid: { key: string; reason: string }[] = [];
+    const valid: Array<{ key: string; usage: number; limit: number }> = [];
+    const invalid: Array<{ key: string; reason: string }> = [];
+    const unverifiable: Array<{ key: string; reason: string }> = []; // rate_limited/timeout - can't verify
     
-    // Check keys in parallel with concurrency limit
-    const CONCURRENCY = 5;
+    // Lower concurrency and add delay to avoid Tavily rate limiting
+    const CONCURRENCY = 2;
+    const BATCH_DELAY_MS = 1000; // 1 second between batches
+    
     for (let i = 0; i < keysToValidate.length; i += CONCURRENCY) {
       const batch = keysToValidate.slice(i, i + CONCURRENCY);
       const results = await Promise.all(batch.map((k) => checkTavilyKeyUsage(k).then((r) => ({ key: k, ...r }))));
       
       for (const r of results) {
         if (r.valid) {
-          valid.push(r.key);
+          valid.push({ key: r.key, usage: r.usage ?? 0, limit: r.limit ?? 1000 });
+        } else if (r.reason === "rate_limited" || r.reason === "timeout" || r.reason === "network_error") {
+          // Can't verify due to external issues - don't mark as invalid
+          unverifiable.push({ key: r.key, reason: r.reason });
         } else {
           invalid.push({ key: r.key, reason: r.reason || "unknown" });
         }
       }
+      
+      // Add delay between batches with jitter
+      if (i + CONCURRENCY < keysToValidate.length) {
+        const jitter = Math.random() * 200;
+        await sleep(BATCH_DELAY_MS + jitter);
+      }
     }
+    
+    // If add_valid is set, add only verified valid keys to DB (not unverifiable)
+    let addResult: AddTavilyKeysResult | null = null;
+    if (addValid && valid.length > 0) {
+      const keysToAdd = valid.map((v) => v.key);
+      addResult = await addTavilyKeys(c.env.DB, keysToAdd, aliasPrefix);
+    }
+    
+    let message = `验证完成: ${valid.length} 有效`;
+    if (unverifiable.length > 0) message += `, ${unverifiable.length} 无法验证 (限流/超时)`;
+    if (invalid.length > 0) message += `, ${invalid.length} 无效`;
+    if (addResult) message += ` | 已添加: ${addResult.added}, 重复跳过: ${addResult.skipped}`;
     
     return c.json({
       success: true,
-      message: `验证完成: ${valid.length} 有效, ${invalid.length} 无效`,
-      data: { valid, invalid, formatInvalid: rawKeys.length - keysToValidate.length },
+      message,
+      data: {
+        valid: valid.map((v) => v.key),
+        validWithUsage: valid,
+        unverifiable,
+        invalid,
+        formatInvalid,
+        added: addResult?.added ?? 0,
+        skipped: addResult?.skipped ?? 0,
+      },
     });
   } catch (e) {
     return c.json(jsonError(`验证失败: ${e instanceof Error ? e.message : String(e)}`, "TAVILY_KEYS_VALIDATE_ERROR"), 500);
@@ -861,6 +906,9 @@ adminRoutes.post("/api/tavily/keys/sync", requireAdminAuth, async (c) => {
     let success = 0;
     let failed = 0;
 
+    const SYNC_DELAY_MS = 500; // Delay between requests to avoid rate limiting
+    let skipped = 0;
+    
     for (let i = 0; i < batch.length; i++) {
       const k = batch[i]!;
       try {
@@ -870,9 +918,12 @@ adminRoutes.post("/api/tavily/keys/sync", requireAdminAuth, async (c) => {
           if (typeof result.limit === "number") usageUpdate.totalQuota = result.limit;
           await updateTavilyKeyUsage(db, k.key, usageUpdate);
           success++;
-        } else if (result.reason === "deactivated" || result.reason === "unauthorized") {
+        } else if (result.reason === "unauthorized") {
           await markTavilyKeyInvalid(db, k.key, result.reason);
           failed++;
+        } else if (result.reason === "rate_limited" || result.reason === "timeout" || result.reason === "network_error") {
+          // Can't verify now due to external issues - skip, don't count as failed
+          skipped++;
         } else {
           failed++;
         }
@@ -880,16 +931,24 @@ adminRoutes.post("/api/tavily/keys/sync", requireAdminAuth, async (c) => {
         failed++;
       }
       await setTavilySyncProgress(db, { running: true, current: i + 1, total: batch.length, success, failed });
+      
+      // Add delay between requests with jitter
+      if (i + 1 < batch.length) {
+        const jitter = Math.random() * 100;
+        await sleep(SYNC_DELAY_MS + jitter);
+      }
     }
 
     await setTavilySyncProgress(db, { running: false, current: batch.length, total: batch.length, success, failed });
 
     const remaining = totalRemaining - batch.length;
-    const message = remaining > 0
-      ? `已同步 ${batch.length} 个 (成功${success}/失败${failed})，还有 ${remaining} 个待同步，请再次点击`
+    let message = remaining > 0
+      ? `已同步 ${batch.length} 个 (成功${success}/失败${failed}`
       : `同步完成: 成功 ${success} 个, 失败 ${failed} 个`;
+    if (skipped > 0) message += remaining > 0 ? `/跳过${skipped}` : `, 跳过 ${skipped} 个 (限流/超时)`;
+    if (remaining > 0) message += `)，还有 ${remaining} 个待同步，请再次点击`;
 
-    return c.json({ success: true, message, data: { processed: batch.length, success, failed, remaining } });
+    return c.json({ success: true, message, data: { processed: batch.length, success, failed, skipped, remaining } });
   } catch (e) {
     return c.json(jsonError(`同步失败: ${e instanceof Error ? e.message : String(e)}`, "TAVILY_SYNC_ERROR"), 500);
   }
