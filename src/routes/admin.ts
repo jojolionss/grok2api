@@ -688,10 +688,9 @@ adminRoutes.post("/api/tavily/keys/test", requireAdminAuth, async (c) => {
     const result = await checkTavilyKeyUsage(key);
 
     if (result.valid && typeof result.usage === "number") {
-      await updateTavilyKeyUsage(c.env.DB, key, {
-        usedQuota: result.usage,
-        totalQuota: result.limit,
-      });
+      const usageUpdate: { usedQuota: number; totalQuota?: number } = { usedQuota: result.usage };
+      if (typeof result.limit === "number") usageUpdate.totalQuota = result.limit;
+      await updateTavilyKeyUsage(c.env.DB, key, usageUpdate);
       return c.json({
         success: true,
         message: "Key有效",
@@ -753,10 +752,9 @@ adminRoutes.post("/api/tavily/keys/sync", requireAdminAuth, async (c) => {
 
           const result = await checkTavilyKeyUsage(k.key);
           if (result.valid && typeof result.usage === "number") {
-            await updateTavilyKeyUsage(c.env.DB, k.key, {
-              usedQuota: result.usage,
-              totalQuota: result.limit,
-            });
+            const usageUpdate: { usedQuota: number; totalQuota?: number } = { usedQuota: result.usage };
+            if (typeof result.limit === "number") usageUpdate.totalQuota = result.limit;
+            await updateTavilyKeyUsage(c.env.DB, k.key, usageUpdate);
             success++;
           } else if (result.reason === "deactivated" || result.reason === "unauthorized") {
             await markTavilyKeyInvalid(c.env.DB, k.key, result.reason);
