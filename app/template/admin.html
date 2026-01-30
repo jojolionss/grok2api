@@ -1354,11 +1354,6 @@
       requestAnimationFrame(() => d.classList.remove('translate-x-full'));
       setTimeout(() => { d.classList.add('translate-x-full'); setTimeout(() => d.remove(), 300) }, 3000);
     };
-    
-    const escapeHtml = (s) => {
-      if (typeof s !== 'string') return '';
-      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-    };
 
     const logout = () => { localStorage.removeItem('adminToken'); window.location.href = '/login' };
 
@@ -1864,7 +1859,7 @@
     const clearVideoCache = () => clearCacheByType('视频', '/api/cache/clear/videos', '确定要清理视频缓存吗？此操作将删除所有视频缓存文件！');
     const clearCache = () => clearCacheByType('', '/api/cache/clear', '确定要清理缓存吗？此操作将删除 /data/temp 目录中的所有文件！');
     const cachePreviewState = { type: 'image', limit: 24, offset: 0, total: 0, items: [], loading: false };
-    const escapeHtml = (v) => v.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const escapeHtml = (v) => (typeof v === 'string' ? v : '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const updateCachePreviewMeta = () => { const meta = $('cachePreviewMeta'); if (!meta) return; const label = cachePreviewState.type === 'image' ? '图片' : '视频'; meta.textContent = `${label}缓存：${cachePreviewState.total || 0} 个` };
     const updateCachePreviewTabs = () => {
       const imageTab = $('cacheTabImage'), videoTab = $('cacheTabVideo');
@@ -2221,7 +2216,7 @@
       $('selectAllTavily').checked ? filteredTavilyKeys.forEach(k=>selectedTavilyKeys.add(k.key)) : selectedTavilyKeys.clear(); 
       renderTavilyKeys(); 
     };
-    const copyTavilyKey = async (k,e) => { e.stopPropagation(); await navigator.clipboard.writeText(k); showToast('已复制','success'); };
+    const copyTavilyKey = async (k,e) => { e.stopPropagation(); try { await navigator.clipboard.writeText(k); showToast('已复制','success'); } catch { showToast('复制失败','error'); } };
 
     const openAddTavilyModal = () => $('modalAddTavily').classList.remove('hidden');
     const closeAddTavilyModal = () => $('modalAddTavily').classList.add('hidden');
@@ -2241,7 +2236,7 @@
       }
       
       if (invalidKeys.length > 0) {
-        const proceed = confirm(`检测到 ${invalidKeys.length} 个无效格式的 Key (需以 tvly- 开头):\n${invalidKeys.slice(0,3).join('\n')}${invalidKeys.length>3?'\n...':''}\\n\n是否仅添加 ${validKeys.length} 个有效 Key?`);
+        const proceed = confirm(`检测到 ${invalidKeys.length} 个无效格式的 Key (需以 tvly- 开头):\n${invalidKeys.slice(0,3).join('\n')}${invalidKeys.length>3?'\n...':''}\n\n是否仅添加 ${validKeys.length} 个有效 Key?`);
         if (!proceed) return;
       }
       
