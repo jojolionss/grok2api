@@ -26,6 +26,7 @@ import {
 } from "../repo/tokens";
 import {
   addTavilyKeys,
+  type AddTavilyKeysResult,
   checkTavilyKeyUsage,
   deleteTavilyKeys,
   getAllTavilyTags,
@@ -610,8 +611,19 @@ adminRoutes.post("/api/tavily/keys/add", requireAdminAuth, async (c) => {
     const body = (await c.req.json()) as { keys?: string[]; alias_prefix?: string };
     const keys = Array.isArray(body.keys) ? body.keys : [];
     const aliasPrefix = String(body.alias_prefix ?? "").trim();
-    const count = await addTavilyKeys(c.env.DB, keys, aliasPrefix);
-    return c.json({ success: true, message: `添加成功(${count})`, count });
+    const result = await addTavilyKeys(c.env.DB, keys, aliasPrefix);
+    
+    let message = `添加成功: ${result.added}`;
+    if (result.skipped > 0) message += `, 重复跳过: ${result.skipped}`;
+    if (result.invalid.length > 0) message += `, 格式无效: ${result.invalid.length}`;
+    
+    return c.json({ 
+      success: true, 
+      message,
+      added: result.added,
+      skipped: result.skipped,
+      invalid: result.invalid,
+    });
   } catch (e) {
     return c.json(jsonError(`添加失败: ${e instanceof Error ? e.message : String(e)}`, "TAVILY_KEYS_ADD_ERROR"), 500);
   }

@@ -98,16 +98,54 @@ export async function listTavilyKeys(db: Env["DB"]): Promise<TavilyKeyRow[]> {
   );
 }
 
+export interface AddTavilyKeysResult {
+  added: number;
+  skipped: number;
+  invalid: string[];
+}
+
+const TAVILY_KEY_REGEX = /^tvly-[A-Za-z0-9_-]{8,64}$/;
+const MAX_KEY_LENGTH = 128;
+const MAX_KEYS_PER_BATCH = 500;
+
+function isValidTavilyKey(key: string): boolean {
+  return typeof key === "string" && key.length <= MAX_KEY_LENGTH && TAVILY_KEY_REGEX.test(key);
+}
+
 export async function addTavilyKeys(
   db: Env["DB"],
-  keys: string[],
+  keys: unknown[],
   aliasPrefix: string = ""
-): Promise<number> {
+): Promise<AddTavilyKeysResult> {
   const now = nowMs();
-  const cleaned = keys.map((k) => k.trim()).filter(Boolean);
-  if (!cleaned.length) return 0;
+  
+  // Runtime type filter and dedup
+  const seen = new Set<string>();
+  const valid: string[] = [];
+  const invalid: string[] = [];
+  
+  for (const raw of keys) {
+    if (typeof raw !== "string") continue;
+    const k = raw.trim();
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    
+    if (isValidTavilyKey(k)) {
+      valid.push(k);
+    } else {
+      // Only store masked version for security
+      invalid.push(k.length > 20 ? k.substring(0, 15) + "..." : k);
+    }
+  }
+  
+  if (!valid.length) {
+    return { added: 0, skipped: 0, invalid };
+  }
+  
+  // Limit batch size
+  const keysToAdd = valid.slice(0, MAX_KEYS_PER_BATCH);
 
-  const stmts = cleaned.map((k, i) => {
+  const stmts = keysToAdd.map((k, i) => {
     const alias = aliasPrefix ? `${aliasPrefix}-${String(i + 1).padStart(3, "0")}` : "";
     return db
       .prepare(
@@ -117,8 +155,11 @@ export async function addTavilyKeys(
       .bind(k, alias, now);
   });
 
-  await db.batch(stmts);
-  return cleaned.length;
+  const results = await db.batch(stmts);
+  const added = results.filter((r) => r.meta.changes > 0).length;
+  const skipped = keysToAdd.length - added;
+  
+  return { added, skipped, invalid };
 }
 
 export async function deleteTavilyKeys(db: Env["DB"], keys: string[]): Promise<number> {
