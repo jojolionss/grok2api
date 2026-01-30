@@ -3,6 +3,7 @@ import type { Env } from "./env";
 import { openAiRoutes } from "./routes/openai";
 import { mediaRoutes } from "./routes/media";
 import { adminRoutes } from "./routes/admin";
+import { tavilyRoutes } from "./routes/tavily";
 import { runKvDailyClear } from "./kv/cleanup";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -10,6 +11,7 @@ const app = new Hono<{ Bindings: Env }>();
 app.route("/v1", openAiRoutes);
 app.route("/", mediaRoutes);
 app.route("/", adminRoutes);
+app.route("/", tavilyRoutes);
 
 app.get("/health", (c) =>
   c.json({ status: "healthy", service: "Grok2API-Backend", runtime: "cloudflare-workers" }),

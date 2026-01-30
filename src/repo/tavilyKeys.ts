@@ -165,14 +165,23 @@ export async function addTavilyKeys(
 export async function deleteTavilyKeys(db: Env["DB"], keys: string[]): Promise<number> {
   const cleaned = keys.map((k) => k.trim()).filter(Boolean);
   if (!cleaned.length) return 0;
-  const placeholders = cleaned.map(() => "?").join(",");
-  const before = await dbFirst<{ c: number }>(
-    db,
-    `SELECT COUNT(1) as c FROM tavily_keys WHERE key IN (${placeholders})`,
-    cleaned
-  );
-  await dbRun(db, `DELETE FROM tavily_keys WHERE key IN (${placeholders})`, cleaned);
-  return before?.c ?? 0;
+
+  const CHUNK_SIZE = 50; // D1 parameter limit safe
+  let totalDeleted = 0;
+
+  for (let i = 0; i < cleaned.length; i += CHUNK_SIZE) {
+    const chunk = cleaned.slice(i, i + CHUNK_SIZE);
+    const placeholders = chunk.map(() => "?").join(",");
+    const before = await dbFirst<{ c: number }>(
+      db,
+      `SELECT COUNT(1) as c FROM tavily_keys WHERE key IN (${placeholders})`,
+      chunk
+    );
+    await dbRun(db, `DELETE FROM tavily_keys WHERE key IN (${placeholders})`, chunk);
+    totalDeleted += before?.c ?? 0;
+  }
+
+  return totalDeleted;
 }
 
 export async function updateTavilyKeyTags(

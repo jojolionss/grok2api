@@ -4,7 +4,7 @@ import type { EdgeEnv } from "./env";
 const app = new Hono<{ Bindings: EdgeEnv }>();
 
 // API routes - forward to backend via Service Binding
-const API_PREFIXES = ["/v1/", "/api/", "/images/", "/health"];
+const API_PREFIXES = ["/v1/", "/api/", "/images/", "/health", "/tavily/"];
 
 app.all("*", async (c) => {
   const url = new URL(c.req.url);

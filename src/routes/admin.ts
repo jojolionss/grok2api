@@ -293,27 +293,40 @@ adminRoutes.post("/api/tokens/refresh-all", requireAdminAuth, async (c) => {
     const settings = await getSettings(c.env);
     const cf = normalizeCfCookie(settings.grok.cf_clearance ?? "");
 
-    c.executionCtx.waitUntil(
-      (async () => {
-        let success = 0;
-        let failed = 0;
+    const db = c.env.DB;
+    const runRefresh = async () => {
+      let success = 0;
+      let failed = 0;
+      try {
         for (let i = 0; i < tokens.length; i++) {
           const t = tokens[i]!;
           const cookie = cf ? `sso-rw=${t.token};sso=${t.token};${cf}` : `sso-rw=${t.token};sso=${t.token}`;
-          const r = await checkRateLimits(cookie, settings.grok, "grok-4-fast");
-          if (r) {
-            const remaining = (r as any).remainingTokens;
-            if (typeof remaining === "number") await updateTokenLimits(c.env.DB, t.token, { remaining_queries: remaining });
-            success += 1;
-          } else {
+          try {
+            const r = await checkRateLimits(cookie, settings.grok, "grok-4-fast");
+            if (r) {
+              const remaining = (r as any).remainingTokens;
+              if (typeof remaining === "number") await updateTokenLimits(db, t.token, { remaining_queries: remaining });
+              success += 1;
+            } else {
+              failed += 1;
+            }
+          } catch {
             failed += 1;
           }
-          await setRefreshProgress(c.env.DB, { running: true, current: i + 1, total: tokens.length, success, failed });
+          await setRefreshProgress(db, { running: true, current: i + 1, total: tokens.length, success, failed });
           await new Promise((res) => setTimeout(res, 100));
         }
-        await setRefreshProgress(c.env.DB, { running: false, current: tokens.length, total: tokens.length, success, failed });
-      })(),
-    );
+      } finally {
+        await setRefreshProgress(db, { running: false, current: tokens.length, total: tokens.length, success, failed });
+      }
+    };
+
+    // Use waitUntil if available, otherwise run inline (blocking)
+    if (c.executionCtx?.waitUntil) {
+      c.executionCtx.waitUntil(runRefresh());
+    } else {
+      runRefresh().catch(() => {});
+    }
 
     return c.json({ success: true, message: "刷新任务已启动", data: { started: true } });
   } catch (e) {
@@ -750,43 +763,55 @@ adminRoutes.post("/api/tavily/keys/sync", requireAdminAuth, async (c) => {
       failed: 0,
     });
 
-    c.executionCtx.waitUntil(
-      (async () => {
-        let success = 0;
-        let failed = 0;
+    const db = c.env.DB;
+    const runSync = async () => {
+      let success = 0;
+      let failed = 0;
+      try {
         for (let i = 0; i < keys.length; i++) {
           const k = keys[i]!;
           if (k.is_invalid) {
             failed++;
-            await setTavilySyncProgress(c.env.DB, { current: i + 1, success, failed });
+            await setTavilySyncProgress(db, { current: i + 1, success, failed });
             continue;
           }
 
-          const result = await checkTavilyKeyUsage(k.key);
-          if (result.valid && typeof result.usage === "number") {
-            const usageUpdate: { usedQuota: number; totalQuota?: number } = { usedQuota: result.usage };
-            if (typeof result.limit === "number") usageUpdate.totalQuota = result.limit;
-            await updateTavilyKeyUsage(c.env.DB, k.key, usageUpdate);
-            success++;
-          } else if (result.reason === "deactivated" || result.reason === "unauthorized") {
-            await markTavilyKeyInvalid(c.env.DB, k.key, result.reason);
-            failed++;
-          } else {
+          try {
+            const result = await checkTavilyKeyUsage(k.key);
+            if (result.valid && typeof result.usage === "number") {
+              const usageUpdate: { usedQuota: number; totalQuota?: number } = { usedQuota: result.usage };
+              if (typeof result.limit === "number") usageUpdate.totalQuota = result.limit;
+              await updateTavilyKeyUsage(db, k.key, usageUpdate);
+              success++;
+            } else if (result.reason === "deactivated" || result.reason === "unauthorized") {
+              await markTavilyKeyInvalid(db, k.key, result.reason);
+              failed++;
+            } else {
+              failed++;
+            }
+          } catch {
             failed++;
           }
 
-          await setTavilySyncProgress(c.env.DB, { current: i + 1, success, failed });
+          await setTavilySyncProgress(db, { current: i + 1, success, failed });
           await new Promise((res) => setTimeout(res, 200));
         }
-        await setTavilySyncProgress(c.env.DB, {
+      } finally {
+        await setTavilySyncProgress(db, {
           running: false,
           current: keys.length,
           total: keys.length,
           success,
           failed,
         });
-      })()
-    );
+      }
+    };
+
+    if (c.executionCtx?.waitUntil) {
+      c.executionCtx.waitUntil(runSync());
+    } else {
+      runSync().catch(() => {});
+    }
 
     return c.json({ success: true, message: "同步任务已启动", data: { started: true } });
   } catch (e) {
