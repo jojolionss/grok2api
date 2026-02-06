@@ -38,6 +38,22 @@ import {
 import { dbAll, dbFirst, dbRun } from "../db";
 import { nowMs } from "../utils/time";
 import { listUsageForDay, localDayString } from "../repo/apiKeyUsage";
+import {
+  addTavilyKeys,
+  checkTavilyKeyUsage,
+  deleteTavilyKeys,
+  getAllTavilyTags,
+  getTavilyStats,
+  getTavilySyncProgress,
+  listTavilyKeys,
+  markTavilyKeyInvalid,
+  setTavilySyncProgress,
+  tavilyKeyRowToInfo,
+  updateTavilyKeyActive,
+  updateTavilyKeyNote,
+  updateTavilyKeyTags,
+  updateTavilyKeyUsage,
+} from "../repo/tavilyKeys";
 
 function jsonError(message: string, code: string): Record<string, unknown> {
   return { error: message, code };
@@ -1134,6 +1150,173 @@ adminRoutes.post("/api/keys/name", requireAdminAuth, async (c) => {
     return c.json(ok ? { success: true, message: "备注更新成功" } : { success: false, message: "Key不存在" });
   } catch (e) {
     return c.json(jsonError(`更新失败: ${e instanceof Error ? e.message : String(e)}`, "KEY_NAME_ERROR"), 500);
+  }
+});
+
+// === Tavily Keys (admin API) ===
+adminRoutes.get("/api/v1/admin/tavily/keys", requireAdminAuth, async (c) => {
+  try {
+    const rows = await listTavilyKeys(c.env.DB);
+    const data = rows.map(tavilyKeyRowToInfo);
+    const stats = await getTavilyStats(c.env.DB);
+    const progress = await getTavilySyncProgress(c.env.DB);
+    return c.json({ success: true, data, stats, progress });
+  } catch (e) {
+    return c.json(jsonError(`获取失败: ${e instanceof Error ? e.message : String(e)}`, "TAVILY_KEYS_LIST_ERROR"), 500);
+  }
+});
+
+adminRoutes.get("/api/v1/admin/tavily/stats", requireAdminAuth, async (c) => {
+  try {
+    const stats = await getTavilyStats(c.env.DB);
+    return c.json({ success: true, data: stats });
+  } catch (e) {
+    return c.json(jsonError(`获取失败: ${e instanceof Error ? e.message : String(e)}`, "TAVILY_STATS_ERROR"), 500);
+  }
+});
+
+adminRoutes.get("/api/v1/admin/tavily/tags", requireAdminAuth, async (c) => {
+  try {
+    const tags = await getAllTavilyTags(c.env.DB);
+    return c.json({ success: true, data: tags });
+  } catch (e) {
+    return c.json(jsonError(`获取失败: ${e instanceof Error ? e.message : String(e)}`, "TAVILY_TAGS_ERROR"), 500);
+  }
+});
+
+adminRoutes.post("/api/v1/admin/tavily/keys", requireAdminAuth, async (c) => {
+  try {
+    const body = (await c.req.json()) as any;
+    const aliasPrefix = String(body?.alias_prefix ?? body?.aliasPrefix ?? "").trim();
+    const raw = body?.keys ?? body?.key ?? body?.data ?? [];
+    const keys: unknown[] = Array.isArray(raw)
+      ? raw
+      : typeof raw === "string"
+        ? raw
+            .split(/\r?\n|,/)
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : [];
+
+    const result = await addTavilyKeys(c.env.DB, keys, aliasPrefix);
+    return c.json({ success: true, data: result });
+  } catch (e) {
+    return c.json(jsonError(`导入失败: ${e instanceof Error ? e.message : String(e)}`, "TAVILY_KEYS_IMPORT_ERROR"), 500);
+  }
+});
+
+adminRoutes.post("/api/v1/admin/tavily/keys/update", requireAdminAuth, async (c) => {
+  try {
+    const body = (await c.req.json()) as any;
+    const key = String(body?.key ?? "").trim();
+    if (!key) return c.json(jsonError("Missing key", "MISSING_KEY"), 400);
+    const existed = await dbFirst<{ key: string }>(c.env.DB, "SELECT key FROM tavily_keys WHERE key = ?", [key]);
+    if (!existed) return c.json(jsonError("Key not found", "NOT_FOUND"), 404);
+
+    if (body?.is_active !== undefined) {
+      await updateTavilyKeyActive(c.env.DB, key, Boolean(body.is_active));
+    }
+
+    if (body?.note !== undefined) {
+      await updateTavilyKeyNote(c.env.DB, key, String(body.note ?? ""));
+    }
+
+    if (body?.tags !== undefined) {
+      const tags = Array.isArray(body.tags) ? body.tags.filter((t: any) => typeof t === "string") : [];
+      await updateTavilyKeyTags(c.env.DB, key, tags);
+    }
+
+    return c.json({ success: true });
+  } catch (e) {
+    return c.json(jsonError(`更新失败: ${e instanceof Error ? e.message : String(e)}`, "TAVILY_KEYS_UPDATE_ERROR"), 500);
+  }
+});
+
+adminRoutes.post("/api/v1/admin/tavily/keys/delete", requireAdminAuth, async (c) => {
+  try {
+    const body = (await c.req.json()) as any;
+    const keys = Array.isArray(body?.keys)
+      ? body.keys
+      : body?.key
+        ? [body.key]
+        : [];
+    const deleted = await deleteTavilyKeys(
+      c.env.DB,
+      keys.map((k: any) => String(k ?? "").trim()).filter(Boolean),
+    );
+    return c.json({ success: true, message: `成功删除 ${deleted} 个Key`, data: { deleted } });
+  } catch (e) {
+    return c.json(jsonError(`删除失败: ${e instanceof Error ? e.message : String(e)}`, "TAVILY_KEYS_DELETE_ERROR"), 500);
+  }
+});
+
+adminRoutes.post("/api/v1/admin/tavily/keys/sync", requireAdminAuth, async (c) => {
+  try {
+    const progress = await getTavilySyncProgress(c.env.DB);
+    if (progress.running) {
+      return c.json({ success: false, message: "同步任务正在进行中", data: progress });
+    }
+
+    const keys = await listTavilyKeys(c.env.DB);
+    await setTavilySyncProgress(c.env.DB, {
+      running: true,
+      current: 0,
+      total: keys.length,
+      success: 0,
+      failed: 0,
+    });
+
+    c.executionCtx.waitUntil(
+      (async () => {
+        let success = 0;
+        let failed = 0;
+
+        for (let i = 0; i < keys.length; i++) {
+          const row = keys[i]!;
+          try {
+            const r = await checkTavilyKeyUsage(row.key);
+            if (r.valid) {
+              if (typeof r.usage === "number" && typeof r.limit === "number") {
+                await updateTavilyKeyUsage(c.env.DB, row.key, { usedQuota: r.usage, totalQuota: r.limit });
+                success += 1;
+              } else if (r.reason === "exhausted") {
+                await updateTavilyKeyUsage(c.env.DB, row.key, { usedQuota: row.total_quota });
+                success += 1;
+              } else {
+                failed += 1;
+              }
+            } else {
+              if (r.reason === "unauthorized") {
+                await markTavilyKeyInvalid(c.env.DB, row.key, "unauthorized");
+                success += 1;
+              } else {
+                failed += 1;
+              }
+            }
+          } catch {
+            failed += 1;
+          }
+
+          await setTavilySyncProgress(c.env.DB, { running: true, current: i + 1, total: keys.length, success, failed });
+          await new Promise((res) => setTimeout(res, 100));
+        }
+
+        await setTavilySyncProgress(c.env.DB, { running: false, current: keys.length, total: keys.length, success, failed });
+      })(),
+    );
+
+    return c.json({ success: true, message: "同步任务已启动", data: { started: true } });
+  } catch (e) {
+    return c.json(jsonError(`同步失败: ${e instanceof Error ? e.message : String(e)}`, "TAVILY_SYNC_ERROR"), 500);
+  }
+});
+
+adminRoutes.get("/api/v1/admin/tavily/keys/sync-progress", requireAdminAuth, async (c) => {
+  try {
+    const progress = await getTavilySyncProgress(c.env.DB);
+    return c.json({ success: true, data: progress });
+  } catch (e) {
+    return c.json(jsonError(`获取失败: ${e instanceof Error ? e.message : String(e)}`, "TAVILY_SYNC_PROGRESS_ERROR"), 500);
   }
 });
 

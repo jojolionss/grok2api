@@ -16,3 +16,9 @@ export interface Env {
   // Batch size for daily cleanup
   KV_CLEANUP_BATCH?: string;
 }
+
+// For dual-worker deployments (edge worker forwards API to backend via Service Binding).
+export interface EdgeEnv {
+  ASSETS: Fetcher;
+  BACKEND: Fetcher;
+}
