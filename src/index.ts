@@ -152,6 +152,13 @@ app.get("/admin/keys", (c) => {
   return fetchAsset(c, "/keys/keys.html");
 });
 
+app.get("/admin/tavily", (c) => {
+  const buildSha = getBuildSha(c.env as Env);
+  const v = c.req.query("v") ?? "";
+  if (v !== buildSha) return c.redirect(`/admin/tavily?v=${encodeURIComponent(buildSha)}`, 302);
+  return fetchAsset(c, "/tavily/tavily.html");
+});
+
 app.get("/chat", (c) => {
   const buildSha = getBuildSha(c.env as Env);
   const v = c.req.query("v") ?? "";

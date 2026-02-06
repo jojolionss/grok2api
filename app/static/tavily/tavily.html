@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Grok2API - Tavily Pool</title>
+  <link rel="icon" href="/static/favicon/favicon.ico">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/style.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-mono/style.css" rel="stylesheet">
+  <link href="/static/common/common.css?v=3" rel="stylesheet">
+  <link href="/static/tavily/tavily.css?v=1" rel="stylesheet">
+  <link href="/static/common/toast.css" rel="stylesheet">
+</head>
+
+<body class="min-h-screen flex flex-col" style="background-color: var(--bg);">
+  <div id="toast-container" class="toast-container"></div>
+  <div id="app-header"></div>
+
+  <main class="space-y-6 flex-1 container mx-auto max-w-4xl px-6 py-8 fade-in">
+    <div class="tavily-page-header flex flex-wrap justify-between items-start gap-3">
+      <div>
+        <h2 class="text-2xl font-semibold tracking-tight">Tavily Pool</h2>
+        <p class="text-[var(--accents-4)] mt-1 text-sm">管理 Tavily API Keys 池（用于 /search、/mcp、/tavily/* 中转）。</p>
+      </div>
+      <div class="flex items-center gap-3 w-full sm:w-auto">
+        <button onclick="openTavilyImportModal()" class="geist-button-outline gap-2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          导入 Key
+        </button>
+        <button onclick="startTavilySync()" class="geist-button-outline gap-2" id="btn-tavily-sync">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 1 1-3-6.7"></path>
+            <polyline points="21 3 21 9 15 9"></polyline>
+          </svg>
+          同步额度
+        </button>
+        <button onclick="loadTavilyKeys()" class="geist-button gap-2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 1 1-3-6.7"></path>
+            <polyline points="21 3 21 9 15 9"></polyline>
+          </svg>
+          刷新
+        </button>
+      </div>
+    </div>
+
+    <div class="h-px bg-[var(--border)] my-6"></div>
+
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4" id="tavily-stats">
+      <div class="stat-card stat-card-compact">
+        <div class="stat-value text-lg" id="tavily-stat-total">-</div>
+        <div class="stat-label">总数</div>
+      </div>
+      <div class="stat-card stat-card-compact">
+        <div class="stat-value text-lg text-green-600" id="tavily-stat-active">-</div>
+        <div class="stat-label">可用</div>
+      </div>
+      <div class="stat-card stat-card-compact">
+        <div class="stat-value text-lg text-orange-600" id="tavily-stat-exhausted">-</div>
+        <div class="stat-label">已耗尽</div>
+      </div>
+      <div class="stat-card stat-card-compact">
+        <div class="stat-value text-lg text-red-600" id="tavily-stat-invalid">-</div>
+        <div class="stat-label">失效</div>
+      </div>
+      <div class="stat-card stat-card-compact">
+        <div class="stat-value text-lg" id="tavily-stat-remaining">-</div>
+        <div class="stat-label">总剩余</div>
+      </div>
+    </div>
+
+    <div class="tavily-toolbar mb-4">
+      <div class="tavily-toolbar-left">
+        <input type="text" id="tavily-search" class="geist-input" placeholder="搜索 alias / key / note / tags..."
+          oninput="onTavilyFilterChange()">
+        <select id="tavily-status-filter" class="geist-input" onchange="onTavilyFilterChange()">
+          <option value="all">全部状态</option>
+          <option value="normal">正常</option>
+          <option value="unused">未使用</option>
+          <option value="error">错误</option>
+          <option value="exhausted">已耗尽</option>
+          <option value="disabled">禁用</option>
+          <option value="invalid">失效</option>
+        </select>
+        <button class="geist-button-outline text-xs px-3" onclick="resetTavilyFilters()">重置</button>
+      </div>
+      <div class="tavily-toolbar-right text-xs text-[var(--accents-5)] flex items-center gap-3">
+        <span>结果 <span id="tavily-filter-count">0</span></span>
+        <span class="toolbar-sep"></span>
+        <span id="tavily-sync-indicator" class="hidden">同步中：<span id="tavily-sync-progress">0/0</span></span>
+      </div>
+    </div>
+
+    <div class="rounded-lg overflow-hidden bg-white mb-4 overflow-x-auto">
+      <table class="geist-table min-w-[1100px]">
+        <thead>
+          <tr>
+            <th class="w-52 text-left">Alias</th>
+            <th class="w-56 text-left">Key</th>
+            <th class="w-24">状态</th>
+            <th class="w-36 text-left">剩余 / 总额</th>
+            <th class="w-20">失败</th>
+            <th class="w-52 text-left">Tags</th>
+            <th class="w-56 text-left">备注</th>
+            <th class="w-44">最近使用</th>
+            <th class="w-44 text-center">操作</th>
+          </tr>
+        </thead>
+        <tbody id="tavily-table-body"></tbody>
+      </table>
+      <div id="loading" class="text-center py-12 text-[var(--accents-4)]">加载中...</div>
+      <div id="empty-state" class="hidden text-center py-12 text-[var(--accents-4)]">
+        暂无 Tavily Key，请点击右上角导入。
+      </div>
+    </div>
+  </main>
+
+  <div id="app-footer"></div>
+
+  <!-- Import Modal -->
+  <div id="tavily-import-modal" class="modal-overlay hidden" role="dialog" aria-modal="true"
+    aria-labelledby="tavily-import-title">
+    <div class="modal-content modal-lg" id="tavily-import-modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="tavily-import-title">导入 Tavily Keys</h3>
+        <button type="button" onclick="closeTavilyImportModal()" class="modal-close" aria-label="关闭弹窗">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="modal-label mb-1 block">Alias 前缀（可选）</label>
+          <input type="text" id="tavily-import-alias-prefix" class="geist-input" placeholder="例如: tavily" maxlength="30" />
+        </div>
+        <div>
+          <label class="modal-label mb-1 block">Keys（支持换行/逗号分隔）</label>
+          <textarea id="tavily-import-keys" class="geist-input font-mono h-48"
+            placeholder="tvly-...\n一行一个，或用逗号分隔"></textarea>
+          <div class="text-xs text-[var(--accents-5)] mt-2">
+            提示：导入时会自动去重与校验格式；无效 key 只会返回被遮罩的片段，不会回显完整值。
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeTavilyImportModal()" class="geist-button-outline text-xs px-3">取消</button>
+          <button type="button" onclick="submitTavilyImport()" class="geist-button text-xs px-3"
+            id="btn-tavily-import-submit">开始导入</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="tavily-edit-modal" class="modal-overlay hidden" role="dialog" aria-modal="true"
+    aria-labelledby="tavily-edit-title">
+    <div class="modal-content modal-lg" id="tavily-edit-modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title" id="tavily-edit-title">编辑 Tavily Key</h3>
+        <button type="button" onclick="closeTavilyEditModal()" class="modal-close" aria-label="关闭弹窗">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <input type="hidden" id="tavily-edit-key" />
+
+        <div>
+          <label class="modal-label mb-1 block">Key</label>
+          <input type="text" id="tavily-edit-key-display" class="geist-input font-mono bg-gray-50 text-gray-500" disabled>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="modal-label mb-1 block">状态</label>
+            <div class="geist-input bg-gray-50 text-gray-600" id="tavily-edit-status">-</div>
+          </div>
+          <div class="flex items-center gap-2 mt-6 md:mt-0">
+            <input type="checkbox" id="tavily-edit-active" class="checkbox">
+            <label for="tavily-edit-active" class="text-sm">启用</label>
+          </div>
+        </div>
+
+        <div>
+          <label class="modal-label mb-1 block">Tags（逗号分隔）</label>
+          <input type="text" id="tavily-edit-tags" class="geist-input" placeholder="例如: search,prod" maxlength="200" />
+        </div>
+
+        <div>
+          <label class="modal-label mb-1 block">备注</label>
+          <input type="text" id="tavily-edit-note" class="geist-input" placeholder="可选备注" maxlength="200" />
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeTavilyEditModal()" class="geist-button-outline text-xs px-3">取消</button>
+          <button type="button" onclick="saveTavilyEdit()" class="geist-button text-xs px-3"
+            id="btn-tavily-edit-submit">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/common/admin-auth.js?v=3"></script>
+  <script src="/static/common/header.js?v=3"></script>
+  <script src="/static/common/footer.js?v=1"></script>
+  <script src="/static/common/toast.js"></script>
+  <script src="/static/tavily/tavily.js?v=1"></script>
+</body>
+
+</html>
+
