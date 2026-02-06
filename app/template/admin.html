@@ -235,7 +235,7 @@
     <div class="mx-auto flex h-14 max-w-7xl items-center px-6">
       <div class="mr-4 flex items-baseline gap-3">
         <span class="font-bold text-xl">Grok2API</span>
-        <span class="text-xs text-gray-400">by @Chenyme & @Tomiya233</span>
+        <span class="text-xs text-gray-400">by @TQZHR</span>
       </div>
       <div class="flex flex-1 items-center justify-end">
         <div class="flex items-center gap-2">
@@ -279,15 +279,13 @@
         <button onclick="switchTab('statistics')" id="tabStatistics"
           class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">请求统计</button>
         <button onclick="switchTab('keys')" id="tabKeys"
-          class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">Access Keys</button>
+          class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">Key 管理</button>
         <button onclick="switchTab('logs')" id="tabLogs"
           class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">日志审计</button>
         <button onclick="switchTab('cache')" id="tabCache"
           class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">缓存预览</button>
         <button onclick="switchTab('settings')" id="tabSettings"
           class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">Setting 配置</button>
-        <button onclick="switchTab('tavily')" id="tabTavily"
-          class="tab-btn border-b-2 border-transparent text-sm font-medium py-3 px-1">Tavily Pool</button>
       </nav>
     </div>
 
@@ -459,16 +457,11 @@
       </div>
     </div>
 
-    <!-- Access Keys 面板 -->
+    <!-- Key 管理面板 -->
     <div id="panelKeys" class="hidden">
       <!-- 工具栏 -->
       <div class="flex items-center justify-between gap-4 mb-6">
-        <div>
-          <h2 class="text-xl font-bold flex items-center gap-2">Access Keys
-            <span class="text-xs font-normal px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">Grok + Tavily</span>
-          </h2>
-          <p class="text-xs text-muted-foreground mt-1">一个 Key 同时支持 /v1/* (Grok) 和 /tavily/*, /search (Tavily) 路由</p>
-        </div>
+        <h2 class="text-xl font-bold">Key Management</h2>
         <div class="flex items-center gap-2">
           <button onclick="loadKeys()" class="btn-icon" title="刷新列表">
             <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
@@ -1002,123 +995,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Tavily Pool 管理面板 -->
-    <div id="panelTavily" class="hidden">
-      <!-- 标题 -->
-      <div class="mb-4">
-        <h2 class="text-xl font-bold">Tavily Key Pool</h2>
-        <p class="text-sm text-muted-foreground">内部 API Key 池，服务器自动选择最优 Key 处理搜索请求</p>
-      </div>
-      <!-- 统计卡片 -->
-      <div class="grid gap-4 grid-cols-2 md:grid-cols-5 mb-6">
-        <div class="rounded-lg border border-border bg-background p-4">
-          <p class="text-sm font-medium text-muted-foreground mb-2">Key 总数</p>
-          <h3 class="text-xl font-bold" id="tavilyStatTotal">-</h3>
-        </div>
-        <div class="rounded-lg border border-border bg-background p-4">
-          <p class="text-sm font-medium text-muted-foreground mb-2">正常</p>
-          <h3 class="text-xl font-bold text-green-600" id="tavilyStatActive">-</h3>
-        </div>
-        <div class="rounded-lg border border-border bg-background p-4">
-          <p class="text-sm font-medium text-muted-foreground mb-2">已耗尽</p>
-          <h3 class="text-xl font-bold text-orange-600" id="tavilyStatExhausted">-</h3>
-        </div>
-        <div class="rounded-lg border border-border bg-background p-4">
-          <p class="text-sm font-medium text-muted-foreground mb-2">失效</p>
-          <h3 class="text-xl font-bold text-destructive" id="tavilyStatInvalid">-</h3>
-        </div>
-        <div class="rounded-lg border border-border bg-background p-4">
-          <p class="text-sm font-medium text-muted-foreground mb-2">总剩余配额</p>
-          <h3 class="text-xl font-bold text-blue-600" id="tavilyStatRemaining">-</h3>
-        </div>
-      </div>
-
-      <!-- Key 列表 -->
-      <div class="rounded-lg border border-border bg-background">
-        <!-- 工具栏 -->
-        <div class="flex items-center justify-between gap-4 p-4 border-b border-border">
-          <div class="flex items-center gap-3 flex-1">
-            <select id="tavilyFilterStatus" onchange="filterTavilyKeys()"
-              class="h-8 px-2 text-sm rounded-md border border-input bg-background focus:outline-none focus:ring-1 w-[100px]">
-              <option value="all">全部状态</option>
-              <option value="正常">正常</option>
-              <option value="已耗尽">已耗尽</option>
-              <option value="失效">失效</option>
-              <option value="禁用">禁用</option>
-            </select>
-          </div>
-          <div class="flex items-center gap-2">
-            <button onclick="syncAllTavilyKeys()" class="btn-icon" title="同步配额">
-              <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2">
-                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
-              </svg>
-            </button>
-            <button onclick="refreshTavilyKeys()" class="btn-icon" title="刷新列表">
-              <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2">
-                <polyline points="23 4 23 10 17 10"/>
-                <polyline points="1 20 1 14 7 14"/>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-              </svg>
-            </button>
-            <button onclick="batchDeleteTavilyKeys()" class="btn-icon hover:bg-destructive/10 hover:text-destructive" title="批量删除">
-              <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2">
-                <polyline points="3 6 5 6 21 6"/>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                <line x1="10" y1="11" x2="10" y2="17"/>
-                <line x1="14" y1="11" x2="14" y2="17"/>
-              </svg>
-            </button>
-            <button onclick="openAddTavilyModal()"
-              class="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 h-8 px-3">
-              <svg class="h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              <span class="text-sm font-medium">添加</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- 同步进度条 -->
-        <div id="tavilySyncProgress" class="hidden p-4 border-b border-border bg-blue-50">
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-sm font-medium">正在同步配额...</span>
-            <span class="text-sm text-muted-foreground" id="tavilySyncText">0/0</span>
-          </div>
-          <div class="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div id="tavilySyncBar" class="h-full bg-blue-500 transition-all duration-300" style="width: 0%"></div>
-          </div>
-        </div>
-
-        <!-- 表格 -->
-        <div class="relative w-full overflow-auto">
-          <table class="w-full text-sm table-fixed">
-            <thead>
-              <tr class="border-b border-border">
-                <th class="h-10 px-3 text-left w-12">
-                  <input type="checkbox" id="selectAllTavily" onchange="toggleSelectAllTavily()"
-                    class="h-3.5 w-3.5 rounded border border-input">
-                </th>
-                <th class="h-10 px-3 text-left text-sm font-medium text-muted-foreground w-72">Key</th>
-                <th class="h-10 px-3 text-left text-sm font-medium text-muted-foreground w-24">别名</th>
-                <th class="h-10 px-3 text-left text-sm font-medium text-muted-foreground w-20">状态</th>
-                <th class="h-10 px-3 text-left text-sm font-medium text-muted-foreground w-32">配额</th>
-                <th class="h-10 px-3 text-left text-sm font-medium text-muted-foreground w-32">最后同步</th>
-                <th class="h-10 px-3 text-left text-sm font-medium text-muted-foreground w-32">标签</th>
-                <th class="h-10 px-3 text-center text-sm font-medium text-muted-foreground w-28 sticky-right">操作</th>
-              </tr>
-            </thead>
-            <tbody id="tavilyTableBody" class="divide-y divide-border">
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
   </main>
 
   <!-- 编辑信息模态框 -->
@@ -1271,53 +1147,6 @@
     </div>
   </div>
 
-  <!-- 添加 Tavily Key 模态框 -->
-  <div id="modalAddTavily" class="hidden fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-    <div class="bg-background rounded-lg border border-border w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl">
-      <div class="flex items-center justify-between p-5 border-b border-border">
-        <h3 class="text-lg font-semibold">添加 Tavily Key</h3>
-        <button onclick="closeAddTavilyModal()" class="text-muted-foreground hover:text-foreground transition-colors">
-          <svg class="h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
-      <div class="p-5 space-y-4">
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-muted-foreground">别名前缀 <span class="text-muted-foreground">(可选)</span></label>
-          <input type="text" id="addTavilyAliasPrefix" placeholder="例如: batch1"
-            class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring">
-        </div>
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-muted-foreground">Tavily Key 列表 <span class="text-muted-foreground">(每行一个，格式: tvly-xxx)</span></label>
-          <textarea id="addTavilyKeyList" rows="10" placeholder="请输入 Tavily API Key，每行一个"
-            class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring font-mono resize-none"></textarea>
-        </div>
-        <div class="flex items-center gap-2">
-          <input type="checkbox" id="skipTavilyValidation" class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary">
-          <label for="skipTavilyValidation" class="text-sm text-muted-foreground">跳过验证（快速导入，不检测有效性）</label>
-        </div>
-        <div id="tavilyImportProgress" class="hidden p-3 bg-muted rounded-md border border-border">
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-sm font-medium" id="tavilyImportStatus">验证中...</span>
-            <span class="text-xs text-muted-foreground" id="tavilyImportCount">0/0</span>
-          </div>
-          <div class="w-full bg-gray-200 rounded-full h-2">
-            <div id="tavilyImportBar" class="bg-primary h-2 rounded-full transition-all" style="width: 0%"></div>
-          </div>
-        </div>
-      </div>
-      <div class="flex items-center justify-end gap-3 p-5 border-t border-border bg-muted/30">
-        <button onclick="closeAddTavilyModal()"
-          class="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors border border-input bg-background hover:bg-accent h-9 px-5">取消</button>
-        <button id="btnAddTavilyKeys" onclick="addTavilyKeysWithValidation()"
-          class="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-5">添加</button>
-      </div>
-    </div>
-  </div>
-
   <!-- 批量创建结果模态框 -->
   <div id="modalBatchResult" class="hidden fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
     <div class="bg-background rounded-lg border border-border w-full max-w-2xl shadow-xl">
@@ -1370,8 +1199,7 @@
 
     const showToast = (m, t = 'success') => {
       const d = document.createElement('div');
-      const colors = { success: 'bg-green-600', error: 'bg-red-600', info: 'bg-blue-600' };
-      d.className = `fixed top-4 right-4 p-4 rounded-md shadow-lg text-white text-sm z-[9999] transition-all duration-300 transform translate-x-full ${colors[t] || colors.info}`;
+      d.className = `fixed top-4 right-4 p-4 rounded-md shadow-lg text-white text-sm z-[9999] transition-all duration-300 transform translate-x-full ${t === 'success' ? 'bg-green-600' : 'bg-red-600'}`;
       d.textContent = m;
       document.body.appendChild(d);
       requestAnimationFrame(() => d.classList.remove('translate-x-full'));
@@ -1381,7 +1209,7 @@
     const logout = () => { localStorage.removeItem('adminToken'); window.location.href = '/login' };
 
     const switchTab = (target) => {
-      ['tokens', 'statistics', 'keys', 'logs', 'cache', 'settings', 'tavily'].forEach(name => {
+      ['tokens', 'statistics', 'keys', 'logs', 'cache', 'settings'].forEach(name => {
         const cap = name.charAt(0).toUpperCase() + name.slice(1);
         const active = name === target;
         const panel = $(`panel${cap}`);
@@ -1401,7 +1229,6 @@
       if (target === 'statistics') loadRequestStats();
       if (target === 'keys') loadKeys();
       if (target === 'logs') loadLogs();
-      if (target === 'tavily') refreshTavilyKeys();
     };
 
     // --- Key 管理 ---
@@ -1689,7 +1516,9 @@
             last_failure_reason: t.last_failure_reason || '',
             limit_reason: t.limit_reason || ''
           }));
-          filterTokens();
+          filteredTokens = allTokens;
+          selectedTokens.clear();
+          renderTokens();
           updateRemaining();
           await loadAllTags();
         }
@@ -1745,29 +1574,55 @@
       }).join('');
       updateBatchActions();
     };
-    const toggleToken = t => { selectedTokens.has(t) ? selectedTokens.delete(t) : selectedTokens.add(t); updateBatchActions(); };
+    const toggleToken = t => selectedTokens[selectedTokens.has(t) ? 'delete' : 'add'](t) || updateBatchActions();
     const toggleSelectAll = () => { const sa = $('selectAll'); sa.checked ? filteredTokens.forEach(t => selectedTokens.add(t.token)) : selectedTokens.clear(); renderTokens() };
     const updateBatchActions = () => { const ba = $('batchActions'), sc = $('selectedCount'), c = selectedTokens.size; ba.classList[c > 0 ? 'add' : 'remove']('flex'); ba.classList[c > 0 ? 'remove' : 'add']('hidden'); c > 0 && (sc.textContent = `已选择 ${c} 项`); $('selectAll').checked = filteredTokens.length > 0 && c === filteredTokens.length };
     const filterTokens = () => { const tf = $('filterType').value, sf = $('filterStatus').value, tagf = $('filterTag').value; filteredTokens = allTokens.filter(t => (tf === 'all' || t.token_type === tf) && (sf === 'all' || t.status === sf) && (tagf === 'all' || t.tags && t.tags.includes(tagf))); selectedTokens.clear(); renderTokens() };
     const loadAllTags = async () => { try { const r = await apiRequest('/api/tokens/tags/all'); if (!r) return; const d = await r.json(); if (d.success) { allTagsList = d.data; const tagFilter = $('filterTag'); const currentValue = tagFilter.value; tagFilter.innerHTML = '<option value="all">全部标签</option>' + allTagsList.map(tag => `<option value="${tag}">${tag}</option>`).join(''); tagFilter.value = currentValue } } catch (e) { console.error('加载标签列表失败:', e) } };
     const refreshTokens = async () => { await loadTokens(); await loadStats() };
     const refreshAllTokens = async () => {
-      if (!confirm('刷新所有 Token 剩余次数？')) return;
-      let total = 0, success = 0, failed = 0;
+      if (!confirm('确定要刷新所有Token的剩余次数吗？这可能需要一段时间...')) return;
+
       try {
-        while (true) {
-          showToast(`正在刷新... 已处理 ${total}`, 'info');
-          const r = await apiRequest('/api/tokens/refresh-all', { method: 'POST' });
-          if (!r) break;
-          const d = await r.json();
-          if (!d.success) { showToast(d.message || '刷新失败', 'error'); break; }
-          total += d.data?.processed || 0;
-          success += d.data?.success || 0;
-          failed += d.data?.failed || 0;
-          if (!d.data?.remaining || d.data.remaining <= 0) break;
-          await new Promise(r => setTimeout(r, 500));
+        const r = await apiRequest('/api/tokens/refresh-all', { method: 'POST' });
+        if (!r) return;
+        const d = await r.json();
+
+        if (!d.success && d.data?.running) {
+          showToast('刷新任务正在进行中，请稍后再试', 'error');
+          return;
         }
-        showToast(`全部完成: 成功 ${success}, 失败 ${failed}`, 'success');
+
+        if (!d.success) {
+          showToast(d.message || '启动刷新失败', 'error');
+          return;
+        }
+
+        showToast('刷新任务已启动...', 'info');
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        while (true) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          try {
+            const pr = await apiRequest('/api/tokens/refresh-progress');
+            if (!pr) break;
+            const pd = await pr.json();
+            if (pd.success && pd.data) {
+              const { current, total, success, failed, running } = pd.data;
+
+              if (!running) {
+                showToast(`刷新完成: 成功 ${success} 个, 失败 ${failed} 个`, 'success');
+                break;
+              }
+
+              if (total > 0) {
+                const pct = Math.round((current / total) * 100);
+                showToast(`刷新进度: ${current}/${total} (${pct}%) | 成功: ${success} 失败: ${failed}`, 'info');
+              }
+            }
+          } catch (e) { break; }
+        }
+
         await refreshTokens();
       } catch (e) {
         showToast('刷新失败: ' + e.message, 'error');
@@ -1854,7 +1709,7 @@
     const clearVideoCache = () => clearCacheByType('视频', '/api/cache/clear/videos', '确定要清理视频缓存吗？此操作将删除所有视频缓存文件！');
     const clearCache = () => clearCacheByType('', '/api/cache/clear', '确定要清理缓存吗？此操作将删除 /data/temp 目录中的所有文件！');
     const cachePreviewState = { type: 'image', limit: 24, offset: 0, total: 0, items: [], loading: false };
-    const escapeHtml = (v) => (typeof v === 'string' ? v : '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const escapeHtml = (v) => v.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const updateCachePreviewMeta = () => { const meta = $('cachePreviewMeta'); if (!meta) return; const label = cachePreviewState.type === 'image' ? '图片' : '视频'; meta.textContent = `${label}缓存：${cachePreviewState.total || 0} 个` };
     const updateCachePreviewTabs = () => {
       const imageTab = $('cacheTabImage'), videoTab = $('cacheTabVideo');
@@ -1997,354 +1852,6 @@
     const updateHoverCardPosition = c => { const t = c.querySelector('.hover-card-trigger'), ct = c.querySelector('.hover-card-content'); if (!t || !ct) return; const { top, bottom } = t.getBoundingClientRect(), h = window.innerHeight; ct.classList.remove('top', 'bottom'); const { visibility: v, opacity: o } = getComputedStyle(ct); Object.assign(ct.style, { visibility: 'hidden', opacity: '1' }); const ch = ct.offsetHeight; Object.assign(ct.style, { visibility: v, opacity: o }); ct.classList.add(top > ch + 10 ? 'top' : h - bottom > ch + 10 ? 'bottom' : 'top') };
     const loadStorageMode = async () => { const modeConfig = { MYSQL: { classes: ['bg-blue-50', 'text-blue-700', 'border-blue-200'], tooltip: '数据库连接模式 - 数据持久化存储，修改配置时可能稍慢但更安全' }, REDIS: { classes: ['bg-purple-50', 'text-purple-700', 'border-purple-200'], tooltip: 'Redis缓存模式 - 高速内存存储，数据持久化且读写性能极佳' }, FILE: { classes: ['bg-green-50', 'text-green-700', 'border-green-200'], tooltip: '文件存储模式 - 本地文件存储，读写速度快' } }; const applyMode = (mode) => { $('storageModeText').textContent = mode; const config = modeConfig[mode] || modeConfig.FILE; $('storageMode').classList.add(...config.classes); $('storageModeTooltip').textContent = config.tooltip; updateHoverCardPosition($('storageMode').closest('.hover-card')) }; try { const r = await apiRequest('/api/storage/mode'); if (!r) return; const d = await r.json(); d.success && applyMode(d.data.mode) } catch (e) { console.error('加载存储模式失败:', e); applyMode('FILE') } };
     window.addEventListener('DOMContentLoaded', () => { loadStorageMode(); refreshTokens(); initCacheViewer(); setInterval(() => { loadStats(); updateRemaining() }, 30000); window.addEventListener('resize', () => { const hoverCard = $('storageMode').closest('.hover-card'); hoverCard && updateHoverCardPosition(hoverCard) }); const hoverCard = $('storageMode').closest('.hover-card'), trigger = hoverCard?.querySelector('.hover-card-trigger'), content = hoverCard?.querySelector('.hover-card-content'); if (trigger && content) { trigger.addEventListener('mouseenter', () => { content.style.opacity = '1'; content.style.visibility = 'visible' }); trigger.addEventListener('mouseleave', () => { content.style.opacity = '0'; content.style.visibility = 'hidden' }) }; $('cfgProxyUrl').addEventListener('input', updateCacheProxyReadonly); $('cfgDynamicStatsig').addEventListener('change', updateStatsigIdState) });
-
-    // === Tavily Keys Management ===
-    let allTavilyKeys = [], filteredTavilyKeys = [], selectedTavilyKeys = new Set();
-
-    const loadTavilyStats = async () => {
-      try {
-        const r = await apiRequest('/api/tavily/stats');
-        if (!r) return;
-        const d = await r.json();
-        if (d.success) {
-          const s = d.data;
-          $('tavilyStatTotal').textContent = s.total || 0;
-          $('tavilyStatActive').textContent = s.active || 0;
-          $('tavilyStatExhausted').textContent = s.exhausted || 0;
-          $('tavilyStatInvalid').textContent = s.invalid || 0;
-          $('tavilyStatRemaining').textContent = s.totalRemainingQuota?.toLocaleString() || '-';
-        }
-      } catch (e) { console.error('Load Tavily stats failed:', e); }
-    };
-
-    const loadTavilyKeys = async () => {
-      try {
-        const r = await apiRequest('/api/tavily/keys');
-        if (!r) return;
-        const d = await r.json();
-        if (d.success) {
-          allTavilyKeys = d.data;
-          filterTavilyKeys();
-        }
-      } catch (e) { console.error('Load Tavily keys failed:', e); }
-    };
-
-    const renderTavilyKeys = () => {
-      const tb = $('tavilyTableBody');
-      const ss = {
-        '正常': 'bg-green-50 text-green-700 border-green-200',
-        '已耗尽': 'bg-orange-50 text-orange-700 border-orange-200',
-        '失效': 'bg-red-50 text-red-700 border-red-200',
-        '禁用': 'bg-gray-100 text-gray-600',
-        '未使用': 'bg-gray-50 text-gray-600',
-        '错误': 'bg-red-50 text-red-700 border-red-200'
-      };
-
-      tb.innerHTML = filteredTavilyKeys.map(k => {
-        const ek = escapeHtml(k.key);
-        const ekShort = escapeHtml(k.key.substring(0,25));
-        const quotaPercent = k.totalQuota > 0 ? Math.round((k.remainingQuota / k.totalQuota) * 100) : 0;
-        const lastSync = k.lastSyncAt ? new Date(k.lastSyncAt).toLocaleString('zh-CN', {dateStyle:'short',timeStyle:'short'}) : '-';
-        const tagsHtml = k.tags?.length ? k.tags.map(t => `<span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs bg-gray-100 text-gray-700">${escapeHtml(t)}</span>`).join(' ') : '-';
-        
-        return `<tr class="transition-colors hover:bg-muted/50" data-tavily-key="${ek}">
-          <td class="py-2.5 px-3 w-12">
-            <input type="checkbox" class="tavily-checkbox h-3.5 w-3.5 rounded border" 
-              ${selectedTavilyKeys.has(k.key)?'checked':''}>
-          </td>
-          <td class="py-2.5 px-3 w-72">
-            <div class="flex items-center gap-2">
-              <span class="font-mono text-xs">${ekShort}...</span>
-              <button class="btn-icon h-6 w-6 tavily-copy-btn" title="复制">
-                <svg class="h-3 w-3 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                </svg>
-              </button>
-            </div>
-          </td>
-          <td class="py-2.5 px-3 w-24 text-xs">${escapeHtml(k.alias)||'-'}</td>
-          <td class="py-2.5 px-3 w-20">
-            <span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium border ${ss[k.status]||ss['正常']}">${escapeHtml(k.status)}</span>
-          </td>
-          <td class="py-2.5 px-3 w-32">
-            <div class="flex items-center gap-2">
-              <div class="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div class="h-full ${quotaPercent>50?'bg-green-500':quotaPercent>20?'bg-orange-500':'bg-red-500'}" style="width:${quotaPercent}%"></div>
-              </div>
-              <span class="text-xs tabular-nums">${k.remainingQuota}/${k.totalQuota}</span>
-            </div>
-          </td>
-          <td class="py-2.5 px-3 w-32 text-xs text-muted-foreground">${lastSync}</td>
-          <td class="py-2.5 px-3 w-32"><div class="flex flex-wrap gap-1">${tagsHtml}</div></td>
-          <td class="py-2.5 px-3 w-28 sticky-right">
-            <div class="flex items-center justify-end gap-1">
-              <button class="btn-icon h-7 w-7 tavily-test-btn" title="测试">
-                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-                </svg>
-              </button>
-              <button class="btn-icon h-7 w-7 tavily-toggle-btn" data-active="${k.isActive}" title="${k.isActive?'禁用':'启用'}">
-                <svg class="h-3.5 w-3.5 ${k.isActive?'text-green-600':'text-muted-foreground'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  ${k.isActive?'<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>':'<circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>'}
-                </svg>
-              </button>
-              <button class="btn-icon h-7 w-7 hover:bg-red-50 hover:text-red-600 tavily-delete-btn" title="删除">
-                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                </svg>
-              </button>
-            </div>
-          </td>
-        </tr>`;
-      }).join('');
-      
-      // Event delegation for Tavily table
-      tb.querySelectorAll('.tavily-checkbox').forEach(cb => {
-        cb.addEventListener('change', () => {
-          const key = cb.closest('tr').dataset.tavilyKey;
-          selectedTavilyKeys.has(key) ? selectedTavilyKeys.delete(key) : selectedTavilyKeys.add(key);
-        });
-      });
-      tb.querySelectorAll('.tavily-copy-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => { e.stopPropagation(); copyTavilyKey(btn.closest('tr').dataset.tavilyKey, e); });
-      });
-      tb.querySelectorAll('.tavily-test-btn').forEach(btn => {
-        btn.addEventListener('click', () => testTavilyKey(btn.closest('tr').dataset.tavilyKey));
-      });
-      tb.querySelectorAll('.tavily-toggle-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const key = btn.closest('tr').dataset.tavilyKey;
-          const isActive = btn.dataset.active === 'true';
-          toggleTavilyActive(key, !isActive);
-        });
-      });
-      tb.querySelectorAll('.tavily-delete-btn').forEach(btn => {
-        btn.addEventListener('click', () => deleteTavilyKey(btn.closest('tr').dataset.tavilyKey));
-      });
-    };
-
-    const filterTavilyKeys = () => {
-      const status = $('tavilyFilterStatus').value;
-      filteredTavilyKeys = status === 'all' ? allTavilyKeys : allTavilyKeys.filter(k => k.status === status);
-      selectedTavilyKeys.clear();
-      renderTavilyKeys();
-    };
-
-    const refreshTavilyKeys = async () => { await loadTavilyKeys(); await loadTavilyStats(); };
-
-    const syncAllTavilyKeys = async () => {
-      if (!confirm('同步所有 Tavily Key 配额？')) return;
-      let total = 0, success = 0, failed = 0;
-      try {
-        while (true) {
-          showToast(`正在同步... 已处理 ${total}`, 'info');
-          const r = await apiRequest('/api/tavily/keys/sync', {method:'POST'});
-          if (!r) break;
-          const d = await r.json();
-          if (!d.success) { showToast(d.message || '同步失败', 'error'); break; }
-          total += d.data?.processed || 0;
-          success += d.data?.success || 0;
-          failed += d.data?.failed || 0;
-          if (!d.data?.remaining || d.data.remaining <= 0) break;
-          await new Promise(r => setTimeout(r, 500));
-        }
-        showToast(`全部完成: 成功 ${success}, 失败 ${failed}`, 'success');
-        await refreshTavilyKeys();
-      } catch (e) { showToast('同步失败: '+e.message, 'error'); }
-    };
-
-    const testTavilyKey = async (key) => {
-      try {
-        const r = await apiRequest('/api/tavily/keys/test', {method:'POST', body:JSON.stringify({key})});
-        if (!r) return;
-        const d = await r.json();
-        if (d.success && d.data.valid) {
-          showToast(`Key有效! 剩余: ${d.data.remaining}/${d.data.limit}`, 'success');
-        } else {
-          showToast(`Key无效: ${d.data?.reason||d.message}`, 'error');
-        }
-        await refreshTavilyKeys();
-      } catch (e) { showToast('测试失败: '+e.message, 'error'); }
-    };
-
-    const toggleTavilyActive = async (key, isActive) => {
-      try {
-        const r = await apiRequest('/api/tavily/keys/toggle', {method:'POST', body:JSON.stringify({key, is_active:isActive})});
-        if (!r) return;
-        const d = await r.json();
-        if (d.success) {
-          showToast(isActive ? '已启用' : '已禁用', 'success');
-          await refreshTavilyKeys();
-        } else {
-          showToast(d.message || '操作失败', 'error');
-        }
-      } catch (e) { showToast('操作失败: '+e.message, 'error'); }
-    };
-
-    const deleteTavilyKey = async (key) => {
-      if (!confirm('确定要删除这个Key吗?')) return;
-      try {
-        const r = await apiRequest('/api/tavily/keys/delete', {method:'POST', body:JSON.stringify({keys:[key]})});
-        if (!r) return;
-        const d = await r.json();
-        if (d.success) {
-          showToast('删除成功', 'success');
-          await refreshTavilyKeys();
-        } else {
-          showToast(d.message || '删除失败', 'error');
-        }
-      } catch (e) { showToast('删除失败: '+e.message, 'error'); }
-    };
-
-    const toggleTavilyKey = (k) => { selectedTavilyKeys.has(k) ? selectedTavilyKeys.delete(k) : selectedTavilyKeys.add(k); };
-    const toggleSelectAllTavily = () => { 
-      $('selectAllTavily').checked ? filteredTavilyKeys.forEach(k=>selectedTavilyKeys.add(k.key)) : selectedTavilyKeys.clear(); 
-      renderTavilyKeys(); 
-    };
-    const copyTavilyKey = async (k,e) => { e.stopPropagation(); try { await navigator.clipboard.writeText(k); showToast('已复制','success'); } catch { showToast('复制失败','error'); } };
-
-    const openAddTavilyModal = () => $('modalAddTavily').classList.remove('hidden');
-    const closeAddTavilyModal = () => $('modalAddTavily').classList.add('hidden');
-
-    const isValidTavilyKey = (k) => /^tvly-[A-Za-z0-9_-]{8,64}$/.test(k);
-    
-    const showTavilyImportProgress = (show, status = '', current = 0, total = 0) => {
-      const el = $('tavilyImportProgress');
-      if (show) {
-        el.classList.remove('hidden');
-        $('tavilyImportStatus').textContent = status;
-        $('tavilyImportCount').textContent = `${current}/${total}`;
-        $('tavilyImportBar').style.width = total > 0 ? `${Math.round(current/total*100)}%` : '0%';
-      } else {
-        el.classList.add('hidden');
-      }
-    };
-    
-    const setAddBtnEnabled = (enabled) => {
-      const btn = $('btnAddTavilyKeys');
-      btn.disabled = !enabled;
-      btn.classList.toggle('opacity-50', !enabled);
-      btn.classList.toggle('cursor-not-allowed', !enabled);
-    };
-
-    const addTavilyKeysWithValidation = async () => {
-      const rawKeys = $('addTavilyKeyList').value.split('\n').map(k=>k.trim()).filter(Boolean);
-      const aliasPrefix = $('addTavilyAliasPrefix').value.trim();
-      const skipValidation = $('skipTavilyValidation').checked;
-      
-      if (!rawKeys.length) return showToast('请输入Key', 'error');
-      
-      const formatValid = rawKeys.filter(isValidTavilyKey);
-      const formatInvalid = rawKeys.filter(k => !isValidTavilyKey(k));
-      
-      if (!formatValid.length) {
-        return showToast(`全部 ${rawKeys.length} 个 Key 格式无效 (需以 tvly- 开头)`, 'error');
-      }
-      
-      if (formatInvalid.length > 0) {
-        const proceed = confirm(`检测到 ${formatInvalid.length} 个格式无效的 Key (需以 tvly- 开头)\n\n是否继续添加 ${formatValid.length} 个格式正确的 Key?`);
-        if (!proceed) return;
-      }
-      
-      setAddBtnEnabled(false);
-      
-      try {
-        if (skipValidation) {
-          // Direct add without validation
-          showTavilyImportProgress(true, '正在添加...', 0, formatValid.length);
-          const r = await apiRequest('/api/tavily/keys/add', {method:'POST', body:JSON.stringify({keys: formatValid, alias_prefix:aliasPrefix})});
-          if (!r) { setAddBtnEnabled(true); showTavilyImportProgress(false); return; }
-          const d = await r.json();
-          showTavilyImportProgress(false);
-          if (d.success) {
-            showToast(`${d.message}${formatInvalid.length > 0 ? ` (格式无效: ${formatInvalid.length})` : ''}`, 'success');
-            closeAddTavilyModal();
-            $('addTavilyKeyList').value = '';
-            $('addTavilyAliasPrefix').value = '';
-            $('skipTavilyValidation').checked = false;
-            await refreshTavilyKeys();
-          } else {
-            showToast(d.message || '添加失败', 'error');
-          }
-        } else {
-          // Validate first, then add valid keys
-          showTavilyImportProgress(true, `验证中 (约 ${Math.ceil(formatValid.length / 2)} 秒)...`, 0, formatValid.length);
-          
-          const r = await apiRequest('/api/tavily/keys/validate', {
-            method:'POST', 
-            body:JSON.stringify({keys: formatValid, add_valid: true, alias_prefix: aliasPrefix})
-          });
-          if (!r) { setAddBtnEnabled(true); showTavilyImportProgress(false); return; }
-          const d = await r.json();
-          showTavilyImportProgress(false);
-          
-          if (!d.success) { 
-            showToast(d.message || '验证失败', 'error'); 
-            setAddBtnEnabled(true);
-            return; 
-          }
-
-      if (!d.data) {
-        showToast('服务器返回数据格式错误', 'error');
-        setAddBtnEnabled(true);
-        return;
-      }
-      const { valid = [], unverifiable = [], invalid = [], added = 0, skipped = 0 } = d.data;
-      const validCount = valid.length;
-      const unverifiableCount = unverifiable.length;
-      const invalidCount = invalid.length;
-      
-      let msg = `验证完成:\n`;
-      msg += `• 有效: ${validCount} 个\n`;
-      if (unverifiableCount > 0) {
-        msg += `• 无法验证 (限流/超时): ${unverifiableCount} 个\n`;
-      }
-      msg += `• 无效: ${invalidCount} 个`;
-      if (invalidCount > 0) {
-        const safeStr = (s) => String(s).replace(/[<>'"]/g, '');
-        const reasons = invalid.slice(0, 3).map(i => `  - ${safeStr(i.key).substring(0,20)}...: ${safeStr(i.reason)}`).join('\n');
-        msg += `\n${reasons}${invalidCount > 3 ? '\n  ...' : ''}`;
-      }
-      msg += `\n\n已添加: ${added} 个, 重复跳过: ${skipped} 个`;
-      if (formatInvalid.length > 0) msg += `\n格式无效: ${formatInvalid.length} 个`;
-      if (unverifiableCount > 0) msg += `\n\n提示: 无法验证的 Key 未添加，可稍后重试`;
-      
-      if (added > 0) {
-        showToast(`成功添加 ${added} 个 Key`, 'success');
-        closeAddTavilyModal();
-        $('addTavilyKeyList').value = '';
-        $('addTavilyAliasPrefix').value = '';
-        $('skipTavilyValidation').checked = false;
-        await refreshTavilyKeys();
-      } else if (validCount > 0) {
-        showToast(`${validCount} 个有效 Key 均已存在`, 'info');
-      } else {
-        alert(msg);
-      }
-        }
-      } catch (e) { 
-        showTavilyImportProgress(false);
-        showToast('操作失败: '+e.message, 'error'); 
-      } finally {
-        setAddBtnEnabled(true);
-      }
-    };
-    
-    const batchDeleteTavilyKeys = async () => {
-      if (!selectedTavilyKeys.size) return showToast('请先选择要删除的 Key', 'error');
-      if (!confirm(`确定要删除选中的 ${selectedTavilyKeys.size} 个 Tavily Key 吗? 此操作不可恢复!`)) return;
-      try {
-        const r = await apiRequest('/api/tavily/keys/delete', {method:'POST', body:JSON.stringify({keys: [...selectedTavilyKeys]})});
-        const d = await r.json();
-        if (d.success) {
-          showToast(d.message, 'success');
-          selectedTavilyKeys.clear();
-          await refreshTavilyKeys();
-        } else {
-          showToast(d.message || '删除失败', 'error');
-        }
-      } catch (e) { showToast('批量删除失败: '+e.message, 'error'); }
-    };
   </script>
 </body>
 

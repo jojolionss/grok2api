@@ -17,7 +17,6 @@ export interface TokenRow {
   last_failure_time: number | null;
   last_failure_reason: string | null;
   failed_count: number;
-  last_refresh_at: number | null;
 }
 
 const MAX_FAILURES = 3;
@@ -93,7 +92,7 @@ export function tokenRowToInfo(row: TokenRow): {
 export async function listTokens(db: Env["DB"]): Promise<TokenRow[]> {
   return dbAll<TokenRow>(
     db,
-    "SELECT token, token_type, created_time, remaining_queries, heavy_remaining_queries, status, tags, note, cooldown_until, last_failure_time, last_failure_reason, failed_count, last_refresh_at FROM tokens ORDER BY created_time DESC",
+    "SELECT token, token_type, created_time, remaining_queries, heavy_remaining_queries, status, tags, note, cooldown_until, last_failure_time, last_failure_reason, failed_count FROM tokens ORDER BY created_time DESC",
   );
 }
 
@@ -116,23 +115,14 @@ export async function addTokens(db: Env["DB"], tokens: string[], token_type: Tok
 export async function deleteTokens(db: Env["DB"], tokens: string[], token_type: TokenType): Promise<number> {
   const cleaned = tokens.map((t) => t.trim()).filter(Boolean);
   if (!cleaned.length) return 0;
-
-  const CHUNK_SIZE = 50;
-  let totalDeleted = 0;
-
-  for (let i = 0; i < cleaned.length; i += CHUNK_SIZE) {
-    const chunk = cleaned.slice(i, i + CHUNK_SIZE);
-    const placeholders = chunk.map(() => "?").join(",");
-    const before = await dbFirst<{ c: number }>(
-      db,
-      `SELECT COUNT(1) as c FROM tokens WHERE token_type = ? AND token IN (${placeholders})`,
-      [token_type, ...chunk],
-    );
-    await dbRun(db, `DELETE FROM tokens WHERE token_type = ? AND token IN (${placeholders})`, [token_type, ...chunk]);
-    totalDeleted += before?.c ?? 0;
-  }
-
-  return totalDeleted;
+  const placeholders = cleaned.map(() => "?").join(",");
+  const before = await dbFirst<{ c: number }>(
+    db,
+    `SELECT COUNT(1) as c FROM tokens WHERE token_type = ? AND token IN (${placeholders})`,
+    [token_type, ...cleaned],
+  );
+  await dbRun(db, `DELETE FROM tokens WHERE token_type = ? AND token IN (${placeholders})`, [token_type, ...cleaned]);
+  return before?.c ?? 0;
 }
 
 export async function updateTokenTags(db: Env["DB"], token: string, token_type: TokenType, tags: string[]): Promise<void> {
@@ -235,16 +225,6 @@ export async function updateTokenLimits(
     params.push(updates.heavy_remaining_queries);
   }
   if (!parts.length) return;
-  parts.push("last_refresh_at = ?");
-  params.push(nowMs());
   params.push(token);
   await dbRun(db, `UPDATE tokens SET ${parts.join(", ")} WHERE token = ?`, params);
-}
-
-export async function resetTokenHealth(db: Env["DB"], token: string): Promise<void> {
-  await dbRun(
-    db,
-    "UPDATE tokens SET status = 'active', failed_count = 0, cooldown_until = NULL, last_failure_time = NULL, last_failure_reason = NULL WHERE token = ?",
-    [token],
-  );
 }
